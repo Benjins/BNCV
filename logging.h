@@ -17,6 +17,7 @@
 //#define BNS_PROFILE_SCOPE(name) 
 
 struct __ScopeProfiler {
+#if defined(_WIN32)
 	LARGE_INTEGER start;
 	const char* name;
 
@@ -34,6 +35,11 @@ struct __ScopeProfiler {
 		uint64_t usec = (end.QuadPart - start.QuadPart) * 1000 * 1000 / freq.QuadPart;
 		BN_LOG("'%s' scope elapsed with %llu usec", name, usec);
 	}
+#else
+	__ScopeProfiler(const char* _name) {
+		// TODO	
+	}
+#endif
 };
 
 
