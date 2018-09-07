@@ -1,0 +1,3 @@
+[submodule "external/BNLM"]
+	path = external/BNLM
+	url = https://github.com/Benjins/BNLM.git
