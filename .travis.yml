@@ -1,0 +1,32 @@
+language: cpp
+sudo: false
+
+compiler:
+  - g++
+  - clang++
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-4.9
+    - g++-4.9
+    - clang
+    - valgrind
+    - cppcheck
+
+before_install:
+  - chmod +x *.sh
+
+install:
+ - if [ "$CXX" = "g++" ]; then export CXX="g++-4.9" CC="gcc-4.9"; fi
+
+before_script: 
+  - cd ${TRAVIS_BUILD_DIR}
+
+script: 
+  - . ./test-all.sh
+
+after_success:
+  - cd ${TRAVIS_BUILD_DIR}
