@@ -75,7 +75,7 @@ struct BNImage {
 
 		subImg.Retain();
 
-		return subImgl;
+		return subImg;
 	}
 
 	void DeepCopyTo(BNImage<_T, _Channels>* outCopy) const {
