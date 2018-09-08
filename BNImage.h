@@ -71,7 +71,9 @@ struct BNImage {
 		subImg.ownsMemory = ownsMemory;
 		subImg.width = w;
 		subImg.height = h;
-		subImg.imageStart = GetPixelPtrNoABC(x, y);
+
+		// XXX: Breaks const-correctness...but not sure how else to structure this?
+		subImg.imageStart = (void*)GetPixelPtrNoABC(x, y);
 
 		subImg.Retain();
 

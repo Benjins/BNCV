@@ -4,6 +4,8 @@
 
 #include "BNImage.h"
 
+#include "imgproc.cpp"
+
 #include "external/BNLM/CppUtils/vector.h"
 #include "external/BNLM/CppUtils/assert.cpp"
 
@@ -116,6 +118,58 @@ int main() {
 			}
 		}
 	}
+
+	{
+		BNImage<unsigned char> img1(6, 6);
+
+		memset(img1.GetPixelPtr(0, 0), 0, 6 * 6);
+
+		{
+			unsigned char* ptr = img1.GetPixelPtr(3, 3);
+			ASSERT(*ptr == 0x00);
+		}
+
+		{
+			BNImage<unsigned char> subImg = img1.GetSubImage(2, 2, 2, 2);
+			ASSERT(subImg.width == 2);
+			ASSERT(subImg.height == 2);
+			ASSERT(subImg.strideInBytes == 6);
+
+			unsigned char* ptr = subImg.GetPixelPtr(1, 1);
+			*ptr = 0x7C;
+		}
+
+		unsigned char* ptr = img1.GetPixelPtr(3, 3);
+		ASSERT(*ptr == 0x7C);
+	}
 	
+	{
+		BNImage<unsigned char> img1(2, 2);
+		{
+			unsigned char* ptr = img1.GetPixelPtr(0, 0);
+			ptr[0] = 0x7E;
+			ptr[1] = 0x2E;
+			ptr[2] = 0x3E;
+			ptr[3] = 0x4E;
+		}
+	
+		BNImage<unsigned char> img2 = img1;
+
+		BNImage<unsigned char> img3(2, 2);
+		img2.DeepCopyTo(&img3);
+
+		{
+			unsigned char* ptr = img3.GetPixelPtr(0, 0);
+			ASSERT(ptr[0] == 0x7E);
+			ASSERT(ptr[1] == 0x2E);
+			ASSERT(ptr[2] == 0x3E);
+			ASSERT(ptr[3] == 0x4E);
+		}
+	}
+
+	{
+		BNImage<unsigned char> img1(4, 4);
+	}
+
 	return 0;
 }
