@@ -172,5 +172,7 @@ struct BNImage {
 	}
 };
 
+BNImage<int> LoadARGBImageFromFile(const char* filename);
+
 
 #endif
