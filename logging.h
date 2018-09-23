@@ -11,7 +11,7 @@
 #include <Windows.h>
 #endif
 
-#define BN_LOG(msg, ...) printf("[%s:%d]: " msg "\n", __FILE__, __LINE__, ## __VA_ARGS__)
+#define BN_LOG(msg, ...) do { char buffer[2048]; snprintf(buffer, sizeof(buffer), "[%s:%d]: " msg "\n", __FILE__, __LINE__, ## __VA_ARGS__); OutputDebugStringA(buffer); } while(0)
 
 #define BNS_PROFILE_SCOPE(name) __ScopeProfiler __scoped_Profiler(name)
 //#define BNS_PROFILE_SCOPE(name) 
