@@ -1,5 +1,14 @@
 #include "BNImage.h"
 
+#include "external/BNLM/core.h"
+
+// TODO: Might want to add this to BNLM itself...
+namespace BNLM {
+
+using Vector2i = BNLM::Vector<int, 2>;
+
+}
+
 void ApplyGaussianFilterToImage(const BNImage<unsigned char>& img, BNImage<unsigned char>* outImg) {
 	//BNS_PROFILE_SCOPE(__FUNCTION__);
 
@@ -42,3 +51,28 @@ void ApplyGaussianFilterToImage(const BNImage<unsigned char>& img, BNImage<unsig
 		}
 	}
 }
+
+// TODO
+void SobelResponseOnImage(const BNImage<unsigned char>& img, BNImage<float>* outGrad, BNImage<float>* outAngle) {
+
+}
+
+void HoughTransformAfterSobel(const BNImage<float>& grad, const BNImage<float>& angle, int thetaCount, int rhoCount, BNImage<short>* outVoting) {
+
+}
+
+void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, Vector<BNLM::Vector2i>* outLocalMaxima) {
+	
+}
+
+// TODO: Filter local maxima again if they're too close?
+
+void DrawLineOnRGBImage(BNImage<unsigned char, 3>* img, int x0, int y0, int x1, int y1, BN_RGB col) {
+
+}
+
+// TODO: Draw text on images?
+
+
+// TODO: FAST corners + ORB features
+

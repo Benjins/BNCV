@@ -175,4 +175,18 @@ struct BNImage {
 };
 
 
+struct BN_RGB {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+};
+
+struct BN_RGBA {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+	unsigned char a;
+};
+
+
 #endif

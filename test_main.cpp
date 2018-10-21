@@ -8,6 +8,7 @@
 
 #include "external/BNLM/CppUtils/vector.h"
 #include "external/BNLM/CppUtils/assert.cpp"
+#include "external/BNLM/CppUtils/testing.cpp"
 
 int main() {
 	printf("Yo.\n");
