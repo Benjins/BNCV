@@ -8,11 +8,12 @@
 
 #include "external/BNLM/CppUtils/vector.h"
 #include "external/BNLM/CppUtils/assert.cpp"
-#include "external/BNLM/CppUtils/testing.cpp"
+#include "external/BNLM/CppUtils/strings.cpp"
+#include "external/BNLM/CppUtils/bitset.cpp"
 
-int main() {
-	printf("Yo.\n");
+#include "external/BNLM/CppUtils/testing.h"
 
+CREATE_TEST_CASE("BNImage basic") {
 	{
 		BNImage<unsigned char, 2> img1;
 
@@ -174,3 +175,6 @@ int main() {
 
 	return 0;
 }
+
+#define CREATE_TEST_MAIN
+#include "external/BNLM/CppUtils/testing.cpp"
