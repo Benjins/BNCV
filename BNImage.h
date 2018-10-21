@@ -62,8 +62,8 @@ struct BNImage {
 	}
 
 	BNImage<_T, _Channels> GetSubImage(int x, int y, int w, int h) const {
-		ASSERT(x >= 0 && x + w < width);
-		ASSERT(y >= 0 && y + h < height);
+		ASSERT(x >= 0 && x + w <= width);
+		ASSERT(y >= 0 && y + h <= height);
 
 		BNImage<_T, _Channels> subImg;
 		subImg.baseData = baseData;
@@ -80,17 +80,17 @@ struct BNImage {
 		return subImg;
 	}
 
-	void DeepCopyTo(BNImage<_T, _Channels>* outCopy) const {
-		ASSERT(outCopy->width == width);
-		ASSERT(outCopy->height == height);
+	void DeepCopyTo(BNImage<_T, _Channels> outCopy) const {
+		ASSERT(outCopy.width == width);
+		ASSERT(outCopy.height == height);
 		BNS_FOR_J(height) {
-			memcpy(outCopy->GetPixelPtrNoABC(0, j), GetPixelPtrNoABC(0, j), width * PixelBytes);
+			memcpy(outCopy.GetPixelPtrNoABC(0, j), GetPixelPtrNoABC(0, j), width * PixelBytes);
 		}
 	}
 
 	BNImage<_T, _Channels> GetDeepCopy() const {
 		BNImage<_T, _Channels> cpy(width, height);
-		DeepCopyTo(&cpy);
+		DeepCopyTo(cpy);
 		return cpy;
 	}
 
@@ -176,10 +176,18 @@ struct BNImage {
 
 
 struct BN_RGB {
-	unsigned char r;
-	unsigned char g;
-	unsigned char b;
+	union {
+		struct {
+			unsigned char r;
+			unsigned char g;
+			unsigned char b;
+		};
+
+		unsigned char rgb[3];
+	};
 };
+
+static_assert(sizeof(BN_RGB) == 3, "Check padding on RN_RGB");
 
 struct BN_RGBA {
 	unsigned char r;

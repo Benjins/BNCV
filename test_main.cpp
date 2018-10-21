@@ -5,6 +5,7 @@
 #include "BNImage.h"
 
 #include "imgproc.cpp"
+#include "feature_matching.cpp"
 #include "features.cpp"
 #include "BNImage.cpp"
 
@@ -29,22 +30,63 @@ BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
 }
 
 CREATE_TEST_CASE("Image FAST") {
-	auto img = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00001_Y.png");
+	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00001_Y.png");
+	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00002_Y.png");
 
-	Vector<BNFastKeyPoint> kpts;
-	Vector<BNORBDescriptor> desc;
-	FindORBFeaturePointsInGSImage(img, 20, &kpts, &desc);
+	Vector<BNFastKeyPoint> kpts1;
+	Vector<BNORBDescriptor> desc1;
+	FindORBFeaturePointsInGSImage(img1, 20, &kpts1, &desc1);
 
-	auto img2 = ConvertGSImageToRGB(img);
+	auto img1rgb = ConvertGSImageToRGB(img1);
 	
-	BNS_VEC_FOREACH(kpts) {
+	BNS_VEC_FOREACH(kpts1) {
 		int x = (int)ptr->imagePoint.x();
 		int y = (int)ptr->imagePoint.y();
 
-		auto* pixel = img2.GetPixelPtr(x, y);
+		auto* pixel = img1rgb.GetPixelPtr(x, y);
 		pixel[0] = 0;
 		pixel[1] = 0;
 		pixel[2] = 250;
+	}
+
+	Vector<BNFastKeyPoint> kpts2;
+	Vector<BNORBDescriptor> desc2;
+	FindORBFeaturePointsInGSImage(img2, 20, &kpts2, &desc2);
+
+	auto img2rgb = ConvertGSImageToRGB(img2);
+
+	BNS_VEC_FOREACH(kpts2) {
+		int x = (int)ptr->imagePoint.x();
+		int y = (int)ptr->imagePoint.y();
+
+		auto* pixel = img2rgb.GetPixelPtr(x, y);
+		pixel[0] = 0;
+		pixel[1] = 0;
+		pixel[2] = 250;
+	}
+
+	BN_RGB green = { 30, 250, 40 };
+
+	//DrawLineOnRGBImage(img2rgb, 30, 30, 60, 400, green);
+
+	Vector<BNFeatureMatch> matches;
+	MatchFeaturesBasic(kpts1, desc1, kpts2, desc2, 70, 0.8f, &matches);
+
+	BNImage<unsigned char, 3> matchImg(img1.width * 2, img1.height);
+	img1rgb.DeepCopyTo(matchImg.GetSubImage(0, 0, img1.width, img1.height));
+	img2rgb.DeepCopyTo(matchImg.GetSubImage(img1.width, 0, img2.width, img2.height));
+
+	BNS_VEC_FOREACH_NAME(matches, match) {
+		auto kpt1 = kpts1.data[match->srcIdx];
+		auto kpt2 = kpts2.data[match->targetIdx];
+
+		int x0 = (int)kpt1.imagePoint.x();
+		int y0 = (int)kpt1.imagePoint.y();
+
+		int x1 = (int)kpt2.imagePoint.x() + img1.width;
+		int y1 = (int)kpt2.imagePoint.y();
+
+		DrawLineOnRGBImage(matchImg, x0, y0, x1, y1, green);
 	}
 
 	return 0;
@@ -196,7 +238,7 @@ CREATE_TEST_CASE("BNImage basic") {
 		BNImage<unsigned char> img2 = img1;
 
 		BNImage<unsigned char> img3(2, 2);
-		img2.DeepCopyTo(&img3);
+		img2.DeepCopyTo(img3);
 
 		{
 			unsigned char* ptr = img3.GetPixelPtr(0, 0);
