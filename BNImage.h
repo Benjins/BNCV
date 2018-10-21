@@ -189,4 +189,7 @@ struct BN_RGBA {
 };
 
 
+BNImage<unsigned char> LoadGSImageFromFile(const char* filename);
+
+
 #endif

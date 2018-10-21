@@ -5,15 +5,53 @@
 #include "BNImage.h"
 
 #include "imgproc.cpp"
+#include "features.cpp"
+#include "BNImage.cpp"
 
 #include "external/BNLM/CppUtils/vector.h"
 #include "external/BNLM/CppUtils/assert.cpp"
 #include "external/BNLM/CppUtils/strings.cpp"
 #include "external/BNLM/CppUtils/bitset.cpp"
 
-#include "external/BNLM/CppUtils/testing.h"
+#include "external/BNLM/CppUtils/testing.h"	
+
+BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
+	BNImage<unsigned char, 3> rgb(img.width, img.height);
+	BNS_FOR_J(img.height) {
+		BNS_FOR_I(img.width) {
+			auto* srcPtr = img.GetPixelPtr(i, j);
+			auto* dstPtr = rgb.GetPixelPtr(i, j);
+			BNS_FOR_NAME(k, 3) { dstPtr[k] = *srcPtr; }
+		}
+	}
+
+	return rgb;
+}
+
+CREATE_TEST_CASE("Image FAST") {
+	auto img = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00001_Y.png");
+
+	Vector<BNFastKeyPoint> kpts;
+	Vector<BNORBDescriptor> desc;
+	FindORBFeaturePointsInGSImage(img, 20, &kpts, &desc);
+
+	auto img2 = ConvertGSImageToRGB(img);
+	
+	BNS_VEC_FOREACH(kpts) {
+		int x = (int)ptr->imagePoint.x();
+		int y = (int)ptr->imagePoint.y();
+
+		auto* pixel = img2.GetPixelPtr(x, y);
+		pixel[0] = 0;
+		pixel[1] = 0;
+		pixel[2] = 250;
+	}
+
+	return 0;
+}
 
 CREATE_TEST_CASE("BNImage basic") {
+	
 	{
 		BNImage<unsigned char, 2> img1;
 

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1"
+                MenuName="Add to Image Watch"/>
+
+
+  <Type Name="BNImage&lt;*&gt;">
+    <UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+  </Type>
+
+  <Type Name="BNImage&lt;*&gt;">
+
+    <Expand>
+
+      <Synthetic Name="[type]" Condition='strcmp("unsigned char", "$T1") == 0'>
+        <DisplayString>UINT8</DisplayString>
+      </Synthetic>
+
+      <Synthetic Name="[type]" Condition='strcmp("float", "$T1") == 0'>
+        <DisplayString>FLOAT32</DisplayString>
+      </Synthetic>
+
+      <Item Name="[channels]">$T2</Item>
+
+      <Item Name="[width]">width</Item>
+
+      <Item Name="[height]">height</Item>
+
+      <Item Name="[data]">imageStart</Item>
+
+      <Item Name="[stride]">strideInBytes</Item>
+
+    </Expand>
+
+  </Type>
+
+
+</AutoVisualizer>

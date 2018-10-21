@@ -9,9 +9,7 @@ using Vector2i = BNLM::Vector<int, 2>;
 
 }
 
-void ApplyGaussianFilterToImage(const BNImage<unsigned char>& img, BNImage<unsigned char>* outImg) {
-	//BNS_PROFILE_SCOPE(__FUNCTION__);
-
+void ApplyGaussianFilterToGSImage(const BNImage<unsigned char>& img, BNImage<unsigned char>* outImg) {
 	ASSERT(outImg->width == img.width);
 	ASSERT(outImg->height == img.height);
 
