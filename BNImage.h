@@ -199,5 +199,8 @@ struct BN_RGBA {
 
 BNImage<unsigned char> LoadGSImageFromFile(const char* filename);
 
+void SaveGSImageToPNGFile(const char* filename, BNImage<unsigned char, 1> img);
+
+void SaveRGBImageToPNGFile(const char* filename, BNImage<unsigned char, 3> img);
 
 #endif

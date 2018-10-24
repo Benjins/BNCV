@@ -12,7 +12,7 @@ void MatchFeaturesBasic(const Vector<BNFastKeyPoint>& srcKpts, const Vector<BNOR
 
 	Vector<BNFeatureMatch> matches;
 
-	const float boundingBoxRadiusSqr = BNS_SQR(4000000.0f);
+	const float boundingBoxRadiusSqr = BNS_SQR(50.0f);
 
 	BNS_VEC_FOR_I(srcKpts) {
 		int bestIdx = -1;

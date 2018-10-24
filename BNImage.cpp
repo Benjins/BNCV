@@ -3,9 +3,17 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "external/stb_image.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "external/stb_image_write.h"
+
 BNImage<unsigned char> LoadGSImageFromFile(const char* filename) {
 	int x, y, n;
 	unsigned char* data = stbi_load(filename, &x, &y, &n, 1);
+
+	if (data == nullptr) {
+		printf("Warning: Could not open file '%s'\n", filename);
+		return BNImage<unsigned char>();
+	}
 
 	BNImage<unsigned char> dataWrapper(x, y, data);
 
@@ -15,5 +23,15 @@ BNImage<unsigned char> LoadGSImageFromFile(const char* filename) {
 	free(data);
 
 	return dataCpy;
+}
+
+void SaveGSImageToPNGFile(const char* filename, BNImage<unsigned char, 1> img) {
+	//
+	stbi_write_png(filename, img.width, img.height, 1, img.imageStart, img.strideInBytes);
+}
+
+void SaveRGBImageToPNGFile(const char* filename, BNImage<unsigned char, 3> img) {
+	//
+	stbi_write_png(filename, img.width, img.height, 3, img.imageStart, img.strideInBytes);
 }
 

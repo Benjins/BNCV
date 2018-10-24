@@ -4,6 +4,7 @@
 
 #include "BNImage.h"
 
+#include "sfm_bootstrap.cpp"
 #include "imgproc.cpp"
 #include "feature_matching.cpp"
 #include "features.cpp"
@@ -30,8 +31,8 @@ BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
 }
 
 CREATE_TEST_CASE("Image FAST") {
-	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00001_Y.png");
-	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00002_Y.png");
+	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00010_Y.png");
+	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00012_Y.png");
 
 	Vector<BNFastKeyPoint> kpts1;
 	Vector<BNORBDescriptor> desc1;
@@ -44,7 +45,7 @@ CREATE_TEST_CASE("Image FAST") {
 		int y = (int)ptr->imagePoint.y();
 
 		auto* pixel = img1rgb.GetPixelPtr(x, y);
-		pixel[0] = 0;
+		pixel[0] = 250;
 		pixel[1] = 0;
 		pixel[2] = 250;
 	}
@@ -60,7 +61,7 @@ CREATE_TEST_CASE("Image FAST") {
 		int y = (int)ptr->imagePoint.y();
 
 		auto* pixel = img2rgb.GetPixelPtr(x, y);
-		pixel[0] = 0;
+		pixel[0] = 250;
 		pixel[1] = 0;
 		pixel[2] = 250;
 	}
@@ -76,18 +77,35 @@ CREATE_TEST_CASE("Image FAST") {
 	img1rgb.DeepCopyTo(matchImg.GetSubImage(0, 0, img1.width, img1.height));
 	img2rgb.DeepCopyTo(matchImg.GetSubImage(img1.width, 0, img2.width, img2.height));
 
+	BNLM::Matrix3f fundamental;
+	CalculateFundamentalMatrixUsing8PointAlgorithm(kpts1, kpts2, matches, &fundamental);
+
+	BNImage<unsigned char, 3> flowImg = img1rgb.GetDeepCopy();
+
 	BNS_VEC_FOREACH_NAME(matches, match) {
-		auto kpt1 = kpts1.data[match->srcIdx];
-		auto kpt2 = kpts2.data[match->targetIdx];
+		BNLM::Vector2f kpt1 = kpts1.data[match->srcIdx].imagePoint;
+		BNLM::Vector2f kpt2 = kpts2.data[match->targetIdx].imagePoint;
 
-		int x0 = (int)kpt1.imagePoint.x();
-		int y0 = (int)kpt1.imagePoint.y();
+		float err = BNS_ABS(BNLM::DotProduct(kpt2.homo(), fundamental * kpt1.homo()));
 
-		int x1 = (int)kpt2.imagePoint.x() + img1.width;
-		int y1 = (int)kpt2.imagePoint.y();
+		float normErr = BNS_MIN(err * 5.0f, 1.0f);
+
+		BN_RGB green = { 40, (unsigned char)((1.0f - normErr) * 250), (unsigned char)(normErr * 250) };
+
+		int x0 = (int)kpt1.x();
+		int y0 = (int)kpt1.y();
+
+		int x1 = (int)kpt2.x() + img1.width;
+		int y1 = (int)kpt2.y();
 
 		DrawLineOnRGBImage(matchImg, x0, y0, x1, y1, green);
+		DrawLineOnRGBImage(flowImg, x0, y0, x1 - img1.width, y1, green);
+
+		//printf("Err: %f\n", err);
 	}
+
+	SaveRGBImageToPNGFile("match_img.png", matchImg);
+	SaveRGBImageToPNGFile("flow_img.png", flowImg);
 
 	return 0;
 }
