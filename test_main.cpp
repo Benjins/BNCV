@@ -30,19 +30,39 @@ BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
 	return rgb;
 }
 
+CREATE_TEST_CASE("Basic FAST") {
+	BNImage<unsigned char> img(50, 50);
+	memset(img.baseData, 0, 50 * 50);
+	*img.GetPixelPtr(30, 30) = 50;
+
+	Vector<BNFastKeyPoint> kpts1;
+	Vector<BNORBDescriptor> desc1;
+	FindORBFeaturePointsInGSImage(img, 30, &kpts1, &desc1);
+
+	ASSERT(kpts1.count == 1);
+	ASSERT(kpts1.data[0].imagePoint.x() == 30);
+	ASSERT(kpts1.data[0].imagePoint.y() == 30);
+
+	return 0;
+}
+
 CREATE_TEST_CASE("Image FAST") {
 	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00010_Y.png");
 	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00012_Y.png");
 
+	const int fastThreshold = 20;
+
 	Vector<BNFastKeyPoint> kpts1;
 	Vector<BNORBDescriptor> desc1;
-	FindORBFeaturePointsInGSImage(img1, 20, &kpts1, &desc1);
+	FindORBFeaturePointsInGSImage(img1, fastThreshold, &kpts1, &desc1);
 
 	auto img1rgb = ConvertGSImageToRGB(img1);
 	
 	BNS_VEC_FOREACH(kpts1) {
 		int x = (int)ptr->imagePoint.x();
 		int y = (int)ptr->imagePoint.y();
+
+		auto subImg = img1.GetSubImage(x - 16, y - 16, 32, 32);
 
 		auto* pixel = img1rgb.GetPixelPtr(x, y);
 		pixel[0] = 250;
@@ -52,7 +72,7 @@ CREATE_TEST_CASE("Image FAST") {
 
 	Vector<BNFastKeyPoint> kpts2;
 	Vector<BNORBDescriptor> desc2;
-	FindORBFeaturePointsInGSImage(img2, 20, &kpts2, &desc2);
+	FindORBFeaturePointsInGSImage(img2, fastThreshold, &kpts2, &desc2);
 
 	auto img2rgb = ConvertGSImageToRGB(img2);
 

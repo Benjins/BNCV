@@ -49,9 +49,7 @@ float GetFASTScoreForImagePoint(unsigned char* pixel, int stride, int threshold,
 	d &= (tableMidPt[vals[5]] | tableMidPt[vals[13]]);
 	d &= (tableMidPt[vals[7]] | tableMidPt[vals[15]]);
 
-	if (d == 0) {
-		return 0.0f;
-	}
+	if (d == 0) { return 0.0f; }
 
 	// TODO: This seems like it should be 12 (what FAST ultimately checks),
 	// but I guess the above take care of the other stuff...
@@ -69,8 +67,7 @@ float GetFASTScoreForImagePoint(unsigned char* pixel, int stride, int threshold,
 
 	// Fill out the rest of the pattern so we can do the final check
 	for (int i = 16; i < 25; i++) {
-		vals[i] = pixel[xOffsets[i - 16] + yOffsets[i - 16] * stride];
-		vals[i] -= pixelVal;
+		vals[i] = vals[i - 16];
 	}
 
 	int count = 0;

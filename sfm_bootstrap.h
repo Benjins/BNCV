@@ -8,6 +8,10 @@
 #include "features.h"
 #include "feature_matching.h"
 
+// TODO: 5-point algo for directly getting essential matrix?
+
+// TODO: Use intrinsics + distortion for...anything?
+
 int CalculateFundamentalMatrixUsing8PointAlgorithm(const Vector<BNFastKeyPoint>& pointsSrc,
 												   const Vector<BNFastKeyPoint>& pointsDst,
 												   const Vector<BNFeatureMatch>& matches,
