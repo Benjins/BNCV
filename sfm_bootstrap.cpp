@@ -222,3 +222,37 @@ int CalculateEssentialMatrixUsing8PointAlgorithm(const Vector<BNFastKeyPoint>& p
 	return ret;
 }
 
+void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essential, BNLM::Matrix3f* outRotations, BNLM::Vector3f* outTranslations) {
+
+	BNLM::Matrix3f U, V;
+	BNLM::Vector3f sigma;
+
+	BNLM::SingularValueDecomposition(essential, &U, &sigma, &V);
+
+	// TODO: Force sigma to be (s,s,0)?
+
+	// TODO: Whyyyy
+	//BNLM::Vector3f t = U.block<3, 1>(0, 2);
+	auto blk = U.block<3, 1>(0, 2);
+	BNLM::Vector3f t = BNLM::Vector3f(blk(0,0), blk(1, 0), blk(2, 0));
+	t.Normalize();
+
+	BNLM::Matrix3f W = BNLM::Matrix3f::Zero();
+	W(0, 1) = -1;
+	W(1, 0) = 1;
+	W(2, 2) = 1;
+
+	BNLM::Matrix3f R1 = U * W * V.transpose();
+	BNLM::Matrix3f R2 = U * W.transpose() * V.transpose();
+
+	// TODO: Check determinant and flip stuff if needed...I think?
+
+	// Four possible combinations of (R1|R2) and (t|-t)
+	BNS_FOR_I(4) {
+		outRotations[i] = (i < 2) ? R1 : R2;
+		outTranslations[i] = (i & 1) ? t : (t * -1.0f);
+	}
+}
+
+
+

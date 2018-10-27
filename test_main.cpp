@@ -122,6 +122,17 @@ CREATE_TEST_CASE("Image FAST") {
 	BNLM::Matrix3f essential;
 	CalculateEssentialMatrixUsing8PointAlgorithm(kpts1, kpts2, matches, intrinsics, distK, &essential);
 
+	{
+		BNLM::Matrix3f rotations[4];
+		BNLM::Vector3f translations[4];
+		DecomposeEssentialMatrixInto4MotionHypotheses(essential, rotations, translations);
+
+		int xc = 0;
+		(void)xc;
+
+		// TODO: Triangulate I guess? Lol.
+	}
+
 	BNImage<unsigned char, 3> flowImg = img1rgb.GetDeepCopy();
 
 	BNS_VEC_FOREACH_NAME(matches, match) {
