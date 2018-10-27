@@ -63,6 +63,7 @@ CREATE_TEST_CASE("Image FAST") {
 		int y = (int)ptr->imagePoint.y();
 
 		auto subImg = img1.GetSubImage(x - 16, y - 16, 32, 32);
+		auto subImg2 = img1.GetSubImage(x - 4, y - 4, 9,9);
 
 		auto* pixel = img1rgb.GetPixelPtr(x, y);
 		pixel[0] = 250;
@@ -97,8 +98,29 @@ CREATE_TEST_CASE("Image FAST") {
 	img1rgb.DeepCopyTo(matchImg.GetSubImage(0, 0, img1.width, img1.height));
 	img2rgb.DeepCopyTo(matchImg.GetSubImage(img1.width, 0, img2.width, img2.height));
 
-	BNLM::Matrix3f fundamental;
-	CalculateFundamentalMatrixUsing8PointAlgorithm(kpts1, kpts2, matches, &fundamental);
+	// Calibration from my LG G5 phone's camera, done offline
+	// (Prooobably some play w/ the intrinsics buuuut w/e)
+	/*
+	  fx: 662.065979
+	  fy: 661.942444
+	  cx: 316.849243
+	  cy: 256.200165
+	  dist K: -0.032051 0.294078
+	*/
+
+	BNLM::Matrix3f intrinsics = BNLM::Matrix3f::Identity();
+	intrinsics(0,0) = 662.065979f;
+	intrinsics(1,1) = 661.942444f;
+	intrinsics(0,2) = 316.849243f;
+	intrinsics(1,2) = 256.200165f;
+	BNLM::Vector2f distK;
+	distK(0) = -0.032051f;
+	distK(1) = 0.294078f;
+
+	// - --- --- - - - - -- - - 
+
+	BNLM::Matrix3f essential;
+	CalculateEssentialMatrixUsing8PointAlgorithm(kpts1, kpts2, matches, intrinsics, distK, &essential);
 
 	BNImage<unsigned char, 3> flowImg = img1rgb.GetDeepCopy();
 
@@ -106,11 +128,7 @@ CREATE_TEST_CASE("Image FAST") {
 		BNLM::Vector2f kpt1 = kpts1.data[match->srcIdx].imagePoint;
 		BNLM::Vector2f kpt2 = kpts2.data[match->targetIdx].imagePoint;
 
-		float err = BNS_ABS(BNLM::DotProduct(kpt2.homo(), fundamental * kpt1.homo()));
-
-		float normErr = BNS_MIN(err * 5.0f, 1.0f);
-
-		BN_RGB green = { 40, (unsigned char)((1.0f - normErr) * 250), (unsigned char)(normErr * 250) };
+		BN_RGB green = { 40, 250, 40 };
 
 		int x0 = (int)kpt1.x();
 		int y0 = (int)kpt1.y();
@@ -119,7 +137,6 @@ CREATE_TEST_CASE("Image FAST") {
 		int y1 = (int)kpt2.y();
 
 		DrawLineOnRGBImage(matchImg, x0, y0, x1, y1, green);
-		DrawLineOnRGBImage(flowImg, x0, y0, x1 - img1.width, y1, green);
 
 		//printf("Err: %f\n", err);
 	}

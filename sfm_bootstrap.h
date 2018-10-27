@@ -12,11 +12,19 @@
 
 // TODO: Use intrinsics + distortion for...anything?
 
-int CalculateFundamentalMatrixUsing8PointAlgorithm(const Vector<BNFastKeyPoint>& pointsSrc,
-												   const Vector<BNFastKeyPoint>& pointsDst,
-												   const Vector<BNFeatureMatch>& matches,
-												   BNLM::Matrix3f* outFundamental);
+// TODO: Move this to camera functions file
+void ConvertFromDistortedPixelCoordsToUndistortedNormalisedPoints(const BNLM::Vector2f* inPts, BNLM::Vector2f* outPoints, int ptCount,
+																  const BNLM::Matrix3f intrinsics, const BNLM::Vector2f distK);
 
+int CalculateEssentialMatrixUsing8PointAlgorithm(const Vector<BNFastKeyPoint>& pointsSrc,
+												 const Vector<BNFastKeyPoint>& pointsDst,
+												 const Vector<BNFeatureMatch>& matches,
+												 const BNLM::Matrix3f intrinsics,
+												 const BNLM::Vector2f distK,
+												 BNLM::Matrix3f* outFundamental);
+
+// Translations will be normalised I swear
+void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essential, BNLM::Matrix3f* outRotations, BNLM::Vector3f* outTranslations);
 
 // TODO: Fundamental matrix -> essential matrix
 
