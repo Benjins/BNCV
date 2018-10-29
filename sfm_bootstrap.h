@@ -32,6 +32,12 @@ void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essentia
 
 // TODO(other file): Triangulate 2D correspondences from camera poses + intrinsics
 
+int TriangulateNormalisedImagePoints(const BNLM::Vector2f* points1, const BNLM::Vector2f* points2, int ptCount,
+									 const BNLM::Matrix4f world2Camera1, const BNLM::Matrix4f world2Camera2,
+									 const float fx, // Used for error scaling
+									 bool* outWasTriangulated, BNLM::Vector3f* outPoints);
+
+
 // TODO(other file): Linear least-squares batch optimisation lol
 
 #endif

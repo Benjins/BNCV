@@ -30,6 +30,27 @@ BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
 	return rgb;
 }
 
+CREATE_TEST_CASE("Determinant of 3x3") {
+	BNLM::Matrix3f mat;
+	mat(0, 0) = 4;
+	mat(0, 1) = -1;
+	mat(0, 2) = 1;
+
+	mat(1, 0) = 4;
+	mat(1, 1) = 5;
+	mat(1, 2) = 3;
+
+	mat(2, 0) = -2;
+	mat(2, 1) =  0;
+	mat(2, 2) =  0;
+
+	float det = mat.determinant();
+
+	ASSERT(det == 16.0f);
+
+	return 0;
+}
+
 CREATE_TEST_CASE("Basic FAST") {
 	BNImage<unsigned char> img(50, 50);
 	memset(img.baseData, 0, 50 * 50);
@@ -47,8 +68,10 @@ CREATE_TEST_CASE("Basic FAST") {
 }
 
 CREATE_TEST_CASE("Image FAST") {
-	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00010_Y.png");
-	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540083470/image_00012_Y.png");
+	srand(20);
+
+	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540685717/image_00000_Y.png");
+	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540685717/image_00001_Y.png");
 
 	const int fastThreshold = 20;
 
@@ -131,6 +154,48 @@ CREATE_TEST_CASE("Image FAST") {
 		(void)xc;
 
 		// TODO: Triangulate I guess? Lol.
+
+		{
+			// --------------------------------------
+			// TODO: Move to separate function?
+
+			Vector<BNLM::Vector2f> points2DSrc;
+			Vector<BNLM::Vector2f> points2DDst;
+
+			points2DSrc.EnsureCapacity(matches.count);
+			points2DDst.EnsureCapacity(matches.count);
+
+			BNS_VEC_FOREACH(matches) {
+				points2DSrc.PushBack(kpts1.data[ptr->srcIdx].imagePoint);
+				points2DDst.PushBack(kpts2.data[ptr->targetIdx].imagePoint);
+			}
+
+			ConvertFromDistortedPixelCoordsToUndistortedNormalisedPoints(points2DSrc.data, points2DSrc.data, points2DSrc.count, intrinsics, distK);
+			ConvertFromDistortedPixelCoordsToUndistortedNormalisedPoints(points2DDst.data, points2DDst.data, points2DDst.count, intrinsics, distK);
+
+			Vector<bool> wasTri;
+			Vector<BNLM::Vector3f> triPoints;
+
+			wasTri.Resize(matches.count);
+			triPoints.Resize(matches.count);
+
+			for (int i = 0; i < 4; i++) {
+				BNLM::Matrix4f w2c1 = BNLM::Matrix4f::Identity();
+				BNLM::Matrix4f w2c2 = BNLM::Matrix4f::Identity();
+				w2c2.block<3, 3>(0, 0) = rotations[i];
+				w2c2.block<3, 1>(0, 3) = translations[i];
+
+				int succCount1 = TriangulateNormalisedImagePoints(points2DSrc.data, points2DDst.data, matches.count,
+																  w2c1, w2c2, intrinsics(0, 0), wasTri.data, triPoints.data);
+			
+				printf("succ count1: %d/%d\n", succCount1, matches.count);
+
+				int succCount2 = TriangulateNormalisedImagePoints(points2DSrc.data, points2DDst.data, matches.count,
+																  w2c2, w2c1, intrinsics(0, 0), wasTri.data, triPoints.data);
+
+				printf("succ count2: %d/%d\n", succCount2, matches.count);
+			}
+		}
 	}
 
 	BNImage<unsigned char, 3> flowImg = img1rgb.GetDeepCopy();

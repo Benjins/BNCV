@@ -85,7 +85,7 @@ void GenerateFundamentalHypothesisFrom8Points(const BNLM::Vector2f* pts0, const 
 // TODO: Compute inliers/error for fundamental hypothesis
 float CalculateErrorForFundamentalMatrix(BNLM::Vector2f* pts0, BNLM::Vector2f* pts1, int pointCount, BNLM::Matrix3f F) {
 	// Uhhhh...
-	const float maxError = 20.0f;
+	const float maxError = 0.5f;
 
 	float totalErr = 0.0f;
 	BNS_FOR_I(pointCount) {
@@ -113,7 +113,7 @@ int CalculateFundamentalMatrixUsing8PointAlgorithm(Vector<BNLM::Vector2f> points
 	ASSERT(pointsSrc.count == pointsDst.count);
 	ASSERT(pointsSrc.count >= 8);
 
-	const int ransacIterationCount = 250;
+	const int ransacIterationCount = 2500;
 
 	BNLM::Matrix3f bestFundamental;
 	float bestError = FLT_MAX;
@@ -222,6 +222,57 @@ int CalculateEssentialMatrixUsing8PointAlgorithm(const Vector<BNFastKeyPoint>& p
 	return ret;
 }
 
+int TriangulateNormalisedImagePoints(const BNLM::Vector2f* points1, const BNLM::Vector2f* points2, int ptCount,
+									 const BNLM::Matrix4f world2Camera1, const BNLM::Matrix4f world2Camera2,
+									 const float fx, // Used for error scaling
+									 bool* outWasTriangulated, BNLM::Vector3f* outPoints) {
+	// SDGJSG
+
+	int successCount = 0;
+
+	const float reprojectionErrorPixels = 10.0f;
+	float reprojectionErrorNormalised = reprojectionErrorPixels / fx;
+	float reprojectionSqErrNormalised = BNS_SQR(reprojectionErrorNormalised);
+
+	BNS_FOR_I(ptCount) {
+		BNLM::Matrix4f A;
+		A.block<1, 4>(0, 0) = world2Camera1.row(2) * points1[i].x() - world2Camera1.row(0);
+		A.block<1, 4>(1, 0) = world2Camera1.row(2) * points1[i].y() - world2Camera1.row(1);
+		A.block<1, 4>(2, 0) = world2Camera2.row(2) * points2[i].x() - world2Camera2.row(0);
+		A.block<1, 4>(3, 0) = world2Camera2.row(2) * points2[i].y() - world2Camera2.row(1);
+
+		BNLM::Matrix4f u, v;
+		BNLM::Vector<float, 4> vals;
+		BNLM::SingularValueDecomposition(A, &u, &vals, &v);
+
+		// TODO: Potential div by 0?
+		BNLM::Vector3f worldPt = v.column(3).hnorm();
+
+		outWasTriangulated[i] = false;
+
+		BNLM::Vector3f camSpace1 = (world2Camera1 * worldPt.homo()).hnorm();
+		if (camSpace1.z() <= 0.0f) { continue; }
+		BNLM::Vector3f camSpace2 = (world2Camera2 * worldPt.homo()).hnorm();
+		if (camSpace2.z() <= 0.0f) { continue; }
+
+		BNLM::Vector2f screenSpace1 = camSpace1.hnorm();
+		BNLM::Vector2f screenSpace2 = camSpace2.hnorm();
+
+		float sqrReproErr1 = (points1[i] - screenSpace1).SquareMag();
+		float sqrReproErr2 = (points2[i] - screenSpace2).SquareMag();
+	
+		if (sqrReproErr1 > reprojectionSqErrNormalised) { continue; }
+		if (sqrReproErr2 > reprojectionSqErrNormalised) { continue; }
+
+		outWasTriangulated[i] = true;
+		successCount++;
+
+		outPoints[i] = worldPt;
+	}
+
+	return successCount;
+}
+
 void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essential, BNLM::Matrix3f* outRotations, BNLM::Vector3f* outTranslations) {
 
 	BNLM::Matrix3f U, V;
@@ -246,6 +297,14 @@ void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essentia
 	BNLM::Matrix3f R2 = U * W.transpose() * V.transpose();
 
 	// TODO: Check determinant and flip stuff if needed...I think?
+
+	if (R1.determinant() < 0) {
+		R1 = R1 * -1.0f;
+	}
+
+	if (R2.determinant() < 0) {
+		R2 = R2 * -1.0f;
+	}
 
 	// Four possible combinations of (R1|R2) and (t|-t)
 	BNS_FOR_I(4) {
