@@ -76,6 +76,73 @@ CREATE_TEST_CASE("Camera calib") {
 
 		SobelResponseNonMaxFilter(sobelGrad, sobelAngle);
 
+		// Mask out the sobel response from the non-selected areas in the data files
+		{
+			FILE* pointsFile = fopen(StringStackBuffer<256>("%s.txt", filenames[i]).buffer, "rb");
+
+			if (pointsFile != NULL) {
+				// NOTE: We do assume that the points are in order (i.e. no diagonals),
+				// but we don't assume clockwise vs anti-clockwise
+				BNLM::Vector2f points[4];
+
+				BNS_ARRAY_FOR_J(points) {
+					fscanf(pointsFile, "%f %f", &points[j](0), &points[j](1));
+				}
+
+				fclose(pointsFile);
+
+				// TODO: Filtering...
+
+				BNLM::Vector2f centroid = BNLM::Vector2f::Zero();
+				BNLM::Vector2f minBounds = BNLM::Vector2f(FLT_MAX, FLT_MAX);
+				BNLM::Vector2f maxBounds = BNLM::Vector2f(-FLT_MAX, -FLT_MAX);
+				BNS_ARRAY_FOR_J(points) {
+					centroid += points[j];
+					minBounds.x() = BNS_MIN(minBounds.x(), points[j].x());
+					maxBounds.x() = BNS_MAX(maxBounds.x(), points[j].x());
+					minBounds.y() = BNS_MIN(minBounds.y(), points[j].y());
+					maxBounds.y() = BNS_MAX(maxBounds.y(), points[j].y());
+				}
+
+				centroid /= 4;
+
+				for (int y = 0; y < sobelGrad.height; y++) {
+					if (y < minBounds.y() || y > maxBounds.y()) {
+						for (int x = 0; x < sobelGrad.width; x++) {
+							*sobelGrad.GetPixelPtr(x, y) = 0;
+						}
+						continue;
+					}
+
+					for (int x = 0; x < sobelGrad.width; x++) {
+						if (x < minBounds.x() || x > maxBounds.x()) {
+							*sobelGrad.GetPixelPtr(x, y) = 0;
+							continue;
+						}
+
+						bool isInPoly = true;
+						BNS_FOR_J(4) {
+							int v0 = j, v1 = (j + 1) % 4;
+							BNLM::Vector2f edge = points[v1] - points[v0];
+							BNLM::Vector2f test1 = centroid - points[v0];
+							BNLM::Vector2f test2 = BNLM::Vector2f(x, y) - points[v0];
+							float sign1 = BNLM::CrossProduct(edge, test1);
+							float sign2 = BNLM::CrossProduct(edge, test2);
+
+							if (sign1 * sign2 < 0) {
+								isInPoly = false;
+								break;
+							}
+						}
+
+						if (!isInPoly) {
+							*sobelGrad.GetPixelPtr(x, y) = 0;
+						}
+					}
+				}
+			}
+		}
+
 		const int thetaResolutionPerDegree = 10;
 
 		BNImage<short> sobelHoughVoting;
@@ -95,8 +162,8 @@ CREATE_TEST_CASE("Camera calib") {
 				}
 			}
 
-			//int expectedLineCount = 8 + 4 + 10 + 1000000;
-			int localMaxCount = houghLocalMaxima.count;// BNS_MIN(houghLocalMaxima.count, expectedLineCount);
+			int expectedLineCount = 12;
+			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
 
 			BNS_FOR_I(localMaxCount) {
 				auto localMax = houghLocalMaxima.data[i];

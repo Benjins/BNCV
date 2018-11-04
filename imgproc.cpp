@@ -106,7 +106,7 @@ void SobelResponseOnImage(const BNImage<unsigned char>& img, BNImage<float>* out
 			*outAngle->GetPixelPtr(i, j) = 0;
 		}
 	}
-	
+
 	for (int y = kernelSize / 2; y < h - kernelSize / 2; y++) {
 		for (int x = kernelSize / 2; x < w - kernelSize / 2; x++) {
 			float responseX = 0.0f;
@@ -187,7 +187,7 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 
 	const int thetaSearchSizeDegrees = 10;
 
-	float gradientThreshold = 0.2f;
+	float gradientThreshold = 0.1f;
 
 	for (int j = border; j < h - border; j++) {
 		for (int i = border; i < w - border; i++) {
@@ -240,7 +240,7 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 	const int localNeighboorhoodSizeRho = 10;
 	const int localNeighboorhoodSizeTheta = 4 * thetaResolutionPerDegree;
 	
-	const int minimumVoteCount = 100;
+	const int minimumVoteCount = 60;
 
 	BNS_FOR_I(rhoCount) {
 		BNS_FOR_J(thetaCount) {
@@ -309,6 +309,8 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 }
 
 // TODO: Filter local maxima again if they're too close?
+
+//void 
 
 void DrawLineOnRGBImage(BNImage<unsigned char, 3> image, int x0, int y0, int x1, int y1, BN_RGB col) {
 	if (x0 == x1) {

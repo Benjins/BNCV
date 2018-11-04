@@ -1,3 +1,9 @@
 @echo  off
 
-cl /Od /Zi /Bt /bigobj /DBNS_DEBUG /I C:\Users\Benji\Coding\AndroidIMUServer\ext\Eigen\eigen-eigen-5a0156e40feb test_main.cpp /Fetest_main.exe 
+cl /Od /Zi /Bt /bigobj /DBNS_DEBUG test_main.cpp /Fetest_main.exe
+
+
+:: /I external/imgui/examples/libs/glfw/include
+
+:: kernel32.lib user32.lib Gdi32.lib Shell32.lib legacy_stdio_definitions.lib legacy_stdio_wide_specifiers.lib Opengl32.lib 
+ 
