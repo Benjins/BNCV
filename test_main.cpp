@@ -95,7 +95,7 @@ CREATE_TEST_CASE("Camera calib") {
 				}
 			}
 
-			int expectedLineCount = 6;
+			int expectedLineCount = 6 + 100000;
 			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
 
 			BNS_FOR_I(localMaxCount) {

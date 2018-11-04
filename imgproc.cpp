@@ -163,7 +163,7 @@ void SobelResponseNonMaxFilter(BNImage<float> gradImg, BNImage<float> angleImg) 
 	}
 }
 
-void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float>& angle, int thetaResolutionPerDegree, BNImage<short>* outVoting) {
+void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float>& angleImg, int thetaResolutionPerDegree, BNImage<short>* outVoting) {
 	const int w = gradImg.width;
 	const int h = gradImg.height;
 	
@@ -185,14 +185,28 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 
 	const int border = 2;
 
+	const int thetaSearchSize = 8;
+
 	float gradientThreshold = 0.01f;
 
 	for (int j = border; j < h - border; j++) {
 		for (int i = border; i < w - border; i++) {
 			float grad = *gradImg.GetPixelPtr(i, j);
+
 			if (grad >= gradientThreshold) {
+
+				float angle = *angleImg.GetPixelPtr(i, j);
+				angle = angle * BNS_RAD2DEG;
+				if (angle <  -90) { angle += 180.0f; }
+				if (angle >= 90) { angle -= 180.0f; }
+
+				int angleMin = (int)(angle - thetaSearchSize);
+				int angleMax = (int)(angle + thetaSearchSize);
+				angleMin = BNS_MAX(angleMin, -90);
+				angleMax = BNS_MIN(angleMax,  90);
+
 				int x = i, y = j;
-				for (int theta = -90 * thetaResolutionPerDegree; theta < 90 * thetaResolutionPerDegree; theta++) {
+				for (int theta = angleMin * thetaResolutionPerDegree; theta < angleMax * thetaResolutionPerDegree; theta++) {
 					float thetaRad = (BNS_DEG2RAD * theta) / thetaResolutionPerDegree;
 					float rho = x * cosf(thetaRad) + y * sinf(thetaRad);
 					int votingX = theta + 90 * thetaResolutionPerDegree;
@@ -215,7 +229,7 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 	const int rhoCount = voting.height;
 
 	const int localNeighboorhoodSizeRho = 2;
-	const int localNeighboorhoodSizeTheta = 2;
+	const int localNeighboorhoodSizeTheta = 2 * thetaResolutionPerDegree;
 	
 	const int minimumVoteCount = 80;
 
