@@ -280,6 +280,16 @@ void DecomposeEssentialMatrixInto4MotionHypotheses(const BNLM::Matrix3f essentia
 
 	BNLM::SingularValueDecomposition(essential, &U, &sigma, &V);
 
+	{
+		BNLM::Matrix3f singValMat = BNLM::Matrix3f::Zero();
+		BNS_FOR_I(3) { singValMat(i, i) = sigma(i); }
+
+		BNLM::Matrix3f recov = U * singValMat * V;// .transpose();
+
+		int xc = 0;
+		(void)xc;
+	}
+
 	// TODO: Force sigma to be (s,s,0)?
 
 	// TODO: Whyyyy

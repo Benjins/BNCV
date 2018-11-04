@@ -30,6 +30,227 @@ BNImage<unsigned char, 3> ConvertGSImageToRGB(BNImage<unsigned char> img) {
 	return rgb;
 }
 
+#include "external/BNLM/test_main.cpp"
+
+float GetRandomFloat01() {
+	double num = rand() % RAND_MAX;
+	const double invDenom = 1.0 / RAND_MAX;
+	return (float)(num * invDenom);
+}
+
+float GetRandomFloatInRange(float min, float max) {
+	float t = GetRandomFloat01();
+	return min + t * (max - min);
+}
+
+CREATE_TEST_CASE("Eigen decomp stuff") {
+
+	// TODO
+
+	return 0;
+}
+
+CREATE_TEST_CASE("Camera calib") {
+	const char* filenames[] = {
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00000_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00023_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00042_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00074_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00084_Y.png",
+	};
+
+	BNS_FOR_I(3) {
+		auto noSupp = LoadRGBImageFromFile(StringStackBuffer<256>("sobel_test_no_supp_%d.png", i).buffer);
+		auto supp = LoadRGBImageFromFile(StringStackBuffer<256>("sobel_test_%d.png", i).buffer);
+
+		int xc = 0;
+		(void)xc;
+	}
+
+	BNS_ARRAY_FOR_I(filenames) {
+
+		auto img1 = LoadGSImageFromFile(filenames[i]);
+
+		BNImage<float> sobelGrad, sobelAngle;
+		SobelResponseOnImage(img1, &sobelGrad, &sobelAngle);
+
+		SobelResponseNonMaxFilter(sobelGrad, sobelAngle);
+
+		const int thetaResolutionPerDegree = 4;
+
+		BNImage<short> sobelHoughVoting;
+		HoughTransformAfterSobel(sobelGrad, sobelAngle, thetaResolutionPerDegree, &sobelHoughVoting);
+
+		Vector<HoughLocalMaximum> houghLocalMaxima;
+		FindLocalMaximaInHoughTransform(sobelHoughVoting, thetaResolutionPerDegree, &houghLocalMaxima);
+
+		{
+			BNImage<unsigned char, 3> votingViz(sobelHoughVoting.width, sobelHoughVoting.height);
+
+			BNS_FOR_NAME(y, sobelHoughVoting.height) {
+				BNS_FOR_NAME(x, sobelHoughVoting.width) {
+					BNS_FOR_NAME(k, 3) {
+						votingViz.GetPixelPtr(x, y)[k] = *sobelHoughVoting.GetPixelPtr(x, y);
+					}
+				}
+			}
+
+			int expectedLineCount = 6;
+			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
+
+			BNS_FOR_I(localMaxCount) {
+				auto localMax = houghLocalMaxima.data[i];
+				unsigned char* pixel = votingViz.GetPixelPtr(localMax.x, localMax.y);
+				pixel[0] = 0;
+				pixel[1] = 250;
+				pixel[2] = 0;
+			}
+
+			auto rgbImg = ConvertGSImageToRGB(img1);
+
+			BNS_FOR_I(localMaxCount) {
+				auto localMax = houghLocalMaxima.data[i];
+				int thetaDegrees = (localMax.x - 90 * thetaResolutionPerDegree) / thetaResolutionPerDegree;
+				float rho = (localMax.y) - (votingViz.height / 2);
+				float theta = thetaDegrees * BNS_DEG2RAD;
+				float cosTheta = cosf(theta), sinTheta = sinf(theta);
+
+				if (BNS_ABS(thetaDegrees) > 45) {
+					BNS_FOR_I(rgbImg.width) {
+						int x = i;
+						int y = (int)((rho - x * cosTheta) / sinTheta);
+						if (y >= 0 && y < rgbImg.height) {
+
+							unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
+
+							pixel[0] = 220;
+							pixel[1] = 0;
+							pixel[2] = 50;
+						}
+					}
+				} else {
+					BNS_FOR_J(rgbImg.height) {
+						int y = j;
+						int x = (int)((rho - y * sinTheta) / cosTheta);
+						if (x >= 0 && x < rgbImg.width) {
+							BNS_FOR_NAME(b, 3) {
+								unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
+
+								pixel[0] = 50;
+								pixel[1] = 0;
+								pixel[2] = 220;
+							}
+						}
+					}
+				}
+			}
+
+				SaveRGBImageToPNGFile(StringStackBuffer<256>("voting_viz_%d.png", i).buffer, votingViz);
+				SaveRGBImageToPNGFile(StringStackBuffer<256>("line_viz_%d.png", i).buffer, rgbImg);
+
+			int xc = 0;
+			(void)xc;
+		}
+
+		BNImage<unsigned char, 3> testOut(img1.width, img1.height);
+
+		BNS_FOR_J(img1.height) {
+			BNS_FOR_I(img1.width) {
+				float angle = *sobelAngle.GetPixelPtr(i, j);
+				float mag = *sobelGrad.GetPixelPtr(i, j);
+				float redness = sin(angle);
+				float blueness = cos(angle);
+
+				redness = BNS_ABS(redness);
+				blueness = BNS_ABS(blueness);
+
+				const float factor = 250.0f;
+
+				unsigned char* bgr = testOut.GetPixelPtr(i, j);
+				bgr[0] = (unsigned char)(blueness * mag * factor);
+				bgr[1] = (unsigned char)(redness * mag * factor);
+				bgr[2] = 0;
+			}
+		}
+
+		SaveRGBImageToPNGFile(StringStackBuffer<256>("sobel_test_%d.png", i).buffer, testOut);
+	}
+
+	return 0;
+}
+
+CREATE_TEST_CASE("Singular vals fuzz") {
+	const int testSeed = 100;
+	printf("Seeding sing vals test w/ %d\n", testSeed);
+	srand(testSeed);
+
+	BNLM::Matrix3f mat = BNLM::Matrix3f::Identity();
+	BNS_FOR_NAME(iter, 3) {
+
+		//BNS_FOR_I(3) {
+		//	BNS_FOR_J(3) {
+		//		mat(i, j) = rand() % 8;// GetRandomFloatInRange(-3.0f, 3.0f);
+		//	}
+		//}
+
+		double vals[] = {
+			4.000000, 1.000000, 2.000000,
+			5.000000, 7.000000, 8.000000,
+			5.000000, 4.000000, 4.000000
+		};
+
+		BNS_FOR_I(9) {
+			mat.data[i] = (float)vals[i];
+		}
+
+		mat(1, 1) += iter;
+
+		printf("\n~~~~~~~~~~~~~~~~~~\n");
+
+		BNLM::Matrix3f U, V;
+		BNLM::Vector3f sigma;
+		BNLM::SingularValueDecomposition(mat, &U, &sigma, &V);
+
+		//printf("U matrix:\n");
+		//printf("  %f %f %f\n", U(0, 0), U(0, 1), U(0, 2));
+		//printf("  %f %f %f\n", U(1, 0), U(1, 1), U(1, 2));
+		//printf("  %f %f %f\n", U(2, 0), U(2, 1), U(2, 2));
+		//
+		//printf("V matrix:\n");
+		//printf("  %f %f %f\n", V(0, 0), V(0, 1), V(0, 2));
+		//printf("  %f %f %f\n", V(1, 0), V(1, 1), V(1, 2));
+		//printf("  %f %f %f\n", V(2, 0), V(2, 1), V(2, 2));
+
+		//printf("singular vals: %f %f %f\n", sigma(0), sigma(1), sigma(2));
+
+		BNLM::Matrix3f diag = BNLM::Matrix3f::Identity();
+		BNS_FOR_I(3) {
+			diag(i, i) = sigma(i);
+		}
+		BNLM::Matrix3f reconstMat = U * diag * V.transpose();
+
+		printf("mat:\n");
+		printf("  %f %f %f\n", mat(0, 0), mat(0, 1), mat(0, 2));
+		printf("  %f %f %f\n", mat(1, 0), mat(1, 1), mat(1, 2));
+		printf("  %f %f %f\n", mat(2, 0), mat(2, 1), mat(2, 2));
+
+		printf("reconstMat:\n");
+		printf("  %f %f %f\n", reconstMat(0, 0), reconstMat(0, 1), reconstMat(0, 2));
+		printf("  %f %f %f\n", reconstMat(1, 0), reconstMat(1, 1), reconstMat(1, 2));
+		printf("  %f %f %f\n", reconstMat(2, 0), reconstMat(2, 1), reconstMat(2, 2));
+
+		BNS_FOR_I(3) {
+			BNS_FOR_J(3) {
+				//ASSERT_APPROX_WITH_EPS(reconstMat(i, j), mat(i, j), 0.01f);
+			}
+		}
+	}
+
+	ASSERT(false);
+
+	return 0;
+}
+
 CREATE_TEST_CASE("Determinant of 3x3") {
 	BNLM::Matrix3f mat;
 	mat(0, 0) = 4;
@@ -71,7 +292,7 @@ CREATE_TEST_CASE("Image FAST") {
 	srand(20);
 
 	auto img1 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540685717/image_00000_Y.png");
-	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540685717/image_00001_Y.png");
+	auto img2 = LoadGSImageFromFile("C:/Users/Benji/CVDatasets/android_lg_g5/still_1540685717/image_00002_Y.png");
 
 	const int fastThreshold = 20;
 
@@ -188,12 +409,17 @@ CREATE_TEST_CASE("Image FAST") {
 				int succCount1 = TriangulateNormalisedImagePoints(points2DSrc.data, points2DDst.data, matches.count,
 																  w2c1, w2c2, intrinsics(0, 0), wasTri.data, triPoints.data);
 			
-				printf("succ count1: %d/%d\n", succCount1, matches.count);
+				printf("Rotation hypothesis: (%f %f %f | %f %f %f | %f %f %f)\n",
+											rotations[i](0, 0), rotations[i](0, 1), rotations[i](0, 2),
+											rotations[i](1, 0), rotations[i](1, 1), rotations[i](1, 2),
+											rotations[i](2, 0), rotations[i](2, 1), rotations[i](2, 2));
+
+				printf("  succ count1: %d/%d\n", succCount1, matches.count);
 
 				int succCount2 = TriangulateNormalisedImagePoints(points2DSrc.data, points2DDst.data, matches.count,
 																  w2c2, w2c1, intrinsics(0, 0), wasTri.data, triPoints.data);
 
-				printf("succ count2: %d/%d\n", succCount2, matches.count);
+				printf("  succ count2: %d/%d\n", succCount2, matches.count);
 			}
 		}
 	}
