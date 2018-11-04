@@ -52,20 +52,20 @@ CREATE_TEST_CASE("Eigen decomp stuff") {
 
 CREATE_TEST_CASE("Camera calib") {
 	const char* filenames[] = {
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00000_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00023_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00042_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00074_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541265794/image_00084_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00000_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00016_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00019_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00034_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00041_Y.png",
+		
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00005_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00008_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00022_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00025_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00029_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00037_Y.png",
+		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00044_Y.png",
 	};
-
-	BNS_FOR_I(3) {
-		auto noSupp = LoadRGBImageFromFile(StringStackBuffer<256>("sobel_test_no_supp_%d.png", i).buffer);
-		auto supp = LoadRGBImageFromFile(StringStackBuffer<256>("sobel_test_%d.png", i).buffer);
-
-		int xc = 0;
-		(void)xc;
-	}
 
 	BNS_ARRAY_FOR_I(filenames) {
 
@@ -76,7 +76,7 @@ CREATE_TEST_CASE("Camera calib") {
 
 		SobelResponseNonMaxFilter(sobelGrad, sobelAngle);
 
-		const int thetaResolutionPerDegree = 4;
+		const int thetaResolutionPerDegree = 10;
 
 		BNImage<short> sobelHoughVoting;
 		HoughTransformAfterSobel(sobelGrad, sobelAngle, thetaResolutionPerDegree, &sobelHoughVoting);
@@ -95,8 +95,8 @@ CREATE_TEST_CASE("Camera calib") {
 				}
 			}
 
-			int expectedLineCount = 6 + 100000;
-			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
+			//int expectedLineCount = 8 + 4 + 10 + 1000000;
+			int localMaxCount = houghLocalMaxima.count;// BNS_MIN(houghLocalMaxima.count, expectedLineCount);
 
 			BNS_FOR_I(localMaxCount) {
 				auto localMax = houghLocalMaxima.data[i];
@@ -110,7 +110,7 @@ CREATE_TEST_CASE("Camera calib") {
 
 			BNS_FOR_I(localMaxCount) {
 				auto localMax = houghLocalMaxima.data[i];
-				int thetaDegrees = (localMax.x - 90 * thetaResolutionPerDegree) / thetaResolutionPerDegree;
+				float thetaDegrees = ((float)localMax.x - 90 * thetaResolutionPerDegree) / thetaResolutionPerDegree;
 				float rho = (localMax.y) - (votingViz.height / 2);
 				float theta = thetaDegrees * BNS_DEG2RAD;
 				float cosTheta = cosf(theta), sinTheta = sinf(theta);

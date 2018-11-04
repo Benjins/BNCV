@@ -168,7 +168,7 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 	const int h = gradImg.height;
 	
 	// Compute max possible bounds for rho (resolution is 1 pixel)
-	const int rhoCount = (int)(sqrtf(w * w + h * h) + 1.0f) * 2;
+	const int rhoCount = (int)(sqrtf(w * w + h * h) + 1.0f) * 3;
 
 	// Theta can have different resolutions if we want, recommend 3-5 per degree for now?
 	int thetaCount = 180 * thetaResolutionPerDegree;
@@ -185,9 +185,9 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 
 	const int border = 2;
 
-	const int thetaSearchSize = 8;
+	const int thetaSearchSizeDegrees = 10;
 
-	float gradientThreshold = 0.01f;
+	float gradientThreshold = 0.2f;
 
 	for (int j = border; j < h - border; j++) {
 		for (int i = border; i < w - border; i++) {
@@ -200,16 +200,25 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 				if (angle <  -90) { angle += 180.0f; }
 				if (angle >= 90) { angle -= 180.0f; }
 
-				int angleMin = (int)(angle - thetaSearchSize);
-				int angleMax = (int)(angle + thetaSearchSize);
-				angleMin = BNS_MAX(angleMin, -90);
-				angleMax = BNS_MIN(angleMax,  90);
+				int angleMin = (int)(angle - thetaSearchSizeDegrees);
+				int angleMax = (int)(angle + thetaSearchSizeDegrees);
 
 				int x = i, y = j;
 				for (int theta = angleMin * thetaResolutionPerDegree; theta < angleMax * thetaResolutionPerDegree; theta++) {
-					float thetaRad = (BNS_DEG2RAD * theta) / thetaResolutionPerDegree;
+
+					int realTheta = theta;
+
+					// Get theta within [-90, 90) degree range
+					if (realTheta < -90 * thetaResolutionPerDegree) {
+						realTheta += 90 * thetaResolutionPerDegree;
+					}
+					if (realTheta >= 90 * thetaResolutionPerDegree) {
+						realTheta -= 90 * thetaResolutionPerDegree;
+					}
+					
+					float thetaRad = (BNS_DEG2RAD * realTheta) / thetaResolutionPerDegree;
 					float rho = x * cosf(thetaRad) + y * sinf(thetaRad);
-					int votingX = theta + 90 * thetaResolutionPerDegree;
+					int votingX = realTheta + 90 * thetaResolutionPerDegree;
 					int votingY = ((int)rho + rhoCount / 2);
 					(*outVoting->GetPixelPtr(votingX, votingY))++;
 				}
@@ -228,10 +237,10 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 	const int thetaCount = voting.width;
 	const int rhoCount = voting.height;
 
-	const int localNeighboorhoodSizeRho = 2;
-	const int localNeighboorhoodSizeTheta = 2 * thetaResolutionPerDegree;
+	const int localNeighboorhoodSizeRho = 10;
+	const int localNeighboorhoodSizeTheta = 4 * thetaResolutionPerDegree;
 	
-	const int minimumVoteCount = 80;
+	const int minimumVoteCount = 100;
 
 	BNS_FOR_I(rhoCount) {
 		BNS_FOR_J(thetaCount) {
@@ -252,13 +261,6 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 						if (newRho < 0 || newRho >= rhoCount) {
 							continue;
 						}
-						
-						if (j == 722 && i == 1142) {
-							int xc = 0;
-							(void)xc;
-
-							//if ()
-						}
 
 						if (newTheta >= thetaCount) {
 							newTheta -= thetaCount;
@@ -270,10 +272,26 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 						}
 
 						int otherScore = *voting.GetPixelPtr(newTheta, newRho);
-						if (currentScore <= (otherScore + 2)) {
+						if (currentScore < otherScore) {
 							isLocalMax = false;
+							break;
+						}
+						else if (currentScore == otherScore) {
+							// If we have a pixel w/ a higher score, we suppress ourselves
+							// But in the case of two lines w/ equal score, we need to suppress one but not the other
+							// So here we just pick the one with a higher theta/rho combo.
+							// This is okay, since this is just an approximation/first pass.
+							if (jOff < 0 || (jOff == 0 && iOff < 0)) {
+								isLocalMax = false;
+								break;
+							}
 						}
 					}
+				}
+
+				// Early break if we've already found a suppressor for this pixel
+				if (!isLocalMax) {
+					break;
 				}
 			}
 
