@@ -161,70 +161,31 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<HoughLocalMaximum> verticalLines, horizontalLines;
 		FilterAndSortVerticalAndHorizontalHoughBuckets(houghLocalMaxima, &verticalLines, &horizontalLines);
 
+		Vector<CheckerboardCorner> checkerboardCorners;
+		FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
+
 		// TODO:
-		// Sort into horizontal and vertical buckets
-		// Sort by rho in each bucket
-		// Find pixel intersections
-		// Search for actual corners (subpixel opt?)
-		// Compute homographies
-		// Construct initial intrinsics solver
-		// Solve for initial K matrix
-		// Solve for camera rotation + translation
-		// Set up intrinsics + distortion optimiser
-		// Optimise everything
+		// [X] Sort into horizontal and vertical buckets
+		// [X] Sort by rho in each bucket
+		// [X] Find pixel intersections
+		// [ ] Search for actual corners (subpixel opt?)
+		// [ ] Compute homographies
+		// [ ] Construct initial intrinsics solver
+		// [ ] Solve for initial K matrix
+		// [ ] Solve for camera rotation + translation
+		// [ ] Set up intrinsics + distortion optimiser
+		// [ ] Optimise everything
 
-		unsigned char colours[4][3] = {
-			{250, 10, 10},
-			{250, 120, 10},
-			{250, 250, 10},
-			{10, 250, 10}
-		};
-
-		if (0){
-
-			int expectedLineCount = 12;
-			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
-
+		if (i < 10){
 			auto rgbImg = ConvertGSImageToRGB(img1);
 
-			BNS_VEC_FOR_NAME(k, verticalLines) {
-				auto localMax = verticalLines.data[k];
-				float thetaDegrees = localMax.thetaDegrees;
-				float rho = localMax.rho;
-				float theta = thetaDegrees * BNS_DEG2RAD;
-				float cosTheta = cosf(theta), sinTheta = sinf(theta);
-
-				BNS_FOR_J(rgbImg.height) {
-					int y = j;
-					int x = (int)((rho - y * sinTheta) / cosTheta);
-					if (x >= 0 && x < rgbImg.width) {
-						unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
-
-						pixel[0] = colours[k][0];
-						pixel[1] = colours[k][1];
-						pixel[2] = colours[k][2];
-					}
-				}
-			}
-
-			BNS_VEC_FOR_NAME(k, horizontalLines) {
-				auto localMax = horizontalLines.data[k];
-				float thetaDegrees = localMax.thetaDegrees;
-				float rho = localMax.rho;
-				float theta = thetaDegrees * BNS_DEG2RAD;
-				float cosTheta = cosf(theta), sinTheta = sinf(theta);
-
-				BNS_FOR_J(rgbImg.width) {
-					int x = j;
-					int y = (int)((rho - x * cosTheta) / sinTheta);
-					if (y >= 0 && y < rgbImg.height) {
-						unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
-
-						pixel[0] = colours[k][0];
-						pixel[1] = colours[k][1];
-						pixel[2] = colours[k][2];
-					}
-				}
+			BNS_VEC_FOREACH(checkerboardCorners) {
+				int x = (int)ptr->imagePt.x();
+				int y = (int)ptr->imagePt.y();
+				unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
+				pixel[0] = 30;
+				pixel[1] = 250;
+				pixel[2] = 30;
 			}
 
 			SaveRGBImageToPNGFile(StringStackBuffer<256>("line_viz_%d.png", i).buffer, rgbImg);

@@ -315,6 +315,7 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 }
 
 // Split local maxima in Hough Space into vertical lines and horizontal lines
+// Also sort the lines by distance from the origin
 void FilterAndSortVerticalAndHorizontalHoughBuckets(const Vector<HoughLocalMaximum>& localMaxima,
 													Vector<HoughLocalMaximum>* outVertical,
 													Vector<HoughLocalMaximum>* outHorizontal) {
@@ -340,6 +341,59 @@ void FilterAndSortVerticalAndHorizontalHoughBuckets(const Vector<HoughLocalMaxim
 
 	BNS_VEC_DUMB_SORT(*outHorizontal, BNS_ABS(l.rho) < BNS_ABS(r.rho));
 	BNS_VEC_DUMB_SORT(*outVertical, BNS_ABS(l.rho) < BNS_ABS(r.rho));
+}
+
+struct CheckerboardCorner {
+	BNLM::Vector2f imagePt;
+	BNLM::Vector2f planePt;
+};
+
+void FindInitialCheckerboardCorners(const Vector<HoughLocalMaximum>& verticalLines,
+									const Vector<HoughLocalMaximum>& horizontalLines,
+									Vector<CheckerboardCorner>* outCorners) {
+	//
+
+	outCorners->Clear();
+	outCorners->EnsureCapacity(verticalLines.count * horizontalLines.count);
+
+	// Line intersection:
+	// I swear, I just had this written down somewhere
+	// Please I hope it works
+	// a1x + b1y = c1
+	// a2x + b2y = c2
+	// a1/a2(a2x + b2y) = a1/a2*c2
+	// a1x + a1/a2*b2y = a1/a2*c2
+	// a1/a2*b2y - b1y = a1/a2*c2 - c1
+	// y = (a1/a2*c2 - c1) / (a1/a2 * b2  - b1)
+	// x = (c1 - b1y) / a1
+
+	BNS_VEC_FOR_I(horizontalLines) {
+
+		HoughLocalMaximum horizontalLine = horizontalLines.data[i];
+		float thetaDegrees1 = horizontalLine.thetaDegrees;
+		float c1 = horizontalLine.rho;
+		float theta1 = thetaDegrees1 * BNS_DEG2RAD;
+
+		float a1 = cosf(theta1), b1 = sinf(theta1);
+
+		BNS_VEC_FOR_J(verticalLines) {
+			HoughLocalMaximum verticalLine = verticalLines.data[j];
+			int thetaDegrees2 = verticalLine.thetaDegrees;
+			float c2 = verticalLine.rho;
+			float theta2 = thetaDegrees2 * BNS_DEG2RAD;
+
+			float a2 = cosf(theta2), b2 = sinf(theta2);
+
+			float imageY = (a1 / a2 * c2 - c1) / (a1 / a2 * b2 - b1);
+			float imageX = (c1 - b1 * imageY) / a1;
+
+			// TODO: Bounds check
+			CheckerboardCorner pt;
+			pt.imagePt = BNLM::Vector2f(imageX, imageY);
+			pt.planePt = BNLM::Vector2f(i, j);
+			outCorners->PushBack(pt);
+		}
+	}
 }
 
 void DrawLineOnRGBImage(BNImage<unsigned char, 3> image, int x0, int y0, int x1, int y1, BN_RGB col) {
