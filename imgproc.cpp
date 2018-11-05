@@ -228,8 +228,10 @@ void HoughTransformAfterSobel(const BNImage<float>& gradImg, const BNImage<float
 }
 
 struct HoughLocalMaximum {
-	int x; // theta
-	int y; // rho
+	//int x; // theta
+	//int y; // rho
+	float thetaDegrees;
+	float rho;
 	int score = 0;
 };
 
@@ -297,8 +299,12 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 
 			if (isLocalMax) {
 				HoughLocalMaximum localMax;
-				localMax.x = j;
-				localMax.y = i;
+
+				float thetaDegrees = ((float)j - 90 * thetaResolutionPerDegree) / thetaResolutionPerDegree;
+				float rho = i - (voting.height / 2);
+
+				localMax.thetaDegrees = thetaDegrees;
+				localMax.rho = rho;
 				localMax.score = currentScore;
 				outLocalMaxima->PushBack(localMax);
 			}
@@ -308,9 +314,33 @@ void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaReso
 	BNS_VEC_DUMB_SORT(*outLocalMaxima, l.score > r.score);
 }
 
-// TODO: Filter local maxima again if they're too close?
+// Split local maxima in Hough Space into vertical lines and horizontal lines
+void FilterAndSortVerticalAndHorizontalHoughBuckets(const Vector<HoughLocalMaximum>& localMaxima,
+													Vector<HoughLocalMaximum>* outVertical,
+													Vector<HoughLocalMaximum>* outHorizontal) {
+	
+	outVertical->Clear();
+	outHorizontal->Clear();
 
-//void 
+	float avgAbsTheta = 0.0f;
+	BNS_VEC_FOLDR(avgAbsTheta, localMaxima, 0.0f, acc + BNS_ABS(item.thetaDegrees));
+
+	avgAbsTheta /= localMaxima.count;
+
+	// The exact distinction b/w horizontal and vertical isn't too important,
+	// just that w/in groups the lines are parallel and b/w the groups they're roughly perpendicular
+	BNS_VEC_FOREACH(localMaxima) {
+		if (BNS_ABS(ptr->thetaDegrees) > avgAbsTheta) {
+			outHorizontal->PushBack(*ptr);
+		}
+		else {
+			outVertical->PushBack(*ptr);
+		}
+	}
+
+	BNS_VEC_DUMB_SORT(*outHorizontal, BNS_ABS(l.rho) < BNS_ABS(r.rho));
+	BNS_VEC_DUMB_SORT(*outVertical, BNS_ABS(l.rho) < BNS_ABS(r.rho));
+}
 
 void DrawLineOnRGBImage(BNImage<unsigned char, 3> image, int x0, int y0, int x1, int y1, BN_RGB col) {
 	if (x0 == x1) {

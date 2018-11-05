@@ -38,3 +38,7 @@
 bnvParserOut.txt
 unicode__out.txt
 *.bnb
+
+
+# 3rd party stuff
+imgui.ini

@@ -51,25 +51,32 @@ CREATE_TEST_CASE("Eigen decomp stuff") {
 }
 
 CREATE_TEST_CASE("Camera calib") {
-	const char* filenames[] = {
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00000_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00016_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00019_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00034_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00041_Y.png",
-		
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00005_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00008_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00022_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00025_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00029_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00037_Y.png",
-		"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00044_Y.png",
-	};
+	//const char* filenames[] = {
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00000_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00016_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00019_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00034_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00041_Y.png",
+	//	
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00005_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00008_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00022_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00025_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00029_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00037_Y.png",
+	//	"C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_00044_Y.png",
+	//};
 
-	BNS_ARRAY_FOR_I(filenames) {
+	//BNS_ARRAY_FOR_I(filenames) {
+	// TODO: File.Load(); and get all png files
+	BNS_FOR_I(45) {
+		StringStackBuffer<256> filename("C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_%05d_Y.png", i);
 
-		auto img1 = LoadGSImageFromFile(filenames[i]);
+		auto img1 = LoadGSImageFromFile(filename.buffer);
+
+		// We've skipped some images for being improperly positioned/lit/etc.
+		// This will catch if an image is missing
+		if (img1.baseData == nullptr) { continue; }
 
 		BNImage<float> sobelGrad, sobelAngle;
 		SobelResponseOnImage(img1, &sobelGrad, &sobelAngle);
@@ -78,7 +85,7 @@ CREATE_TEST_CASE("Camera calib") {
 
 		// Mask out the sobel response from the non-selected areas in the data files
 		{
-			FILE* pointsFile = fopen(StringStackBuffer<256>("%s.txt", filenames[i]).buffer, "rb");
+			FILE* pointsFile = fopen(StringStackBuffer<256>("%s.txt", filename.buffer).buffer, "rb");
 
 			if (pointsFile != NULL) {
 				// NOTE: We do assume that the points are in order (i.e. no diagonals),
@@ -151,96 +158,77 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<HoughLocalMaximum> houghLocalMaxima;
 		FindLocalMaximaInHoughTransform(sobelHoughVoting, thetaResolutionPerDegree, &houghLocalMaxima);
 
-		{
-			BNImage<unsigned char, 3> votingViz(sobelHoughVoting.width, sobelHoughVoting.height);
+		Vector<HoughLocalMaximum> verticalLines, horizontalLines;
+		FilterAndSortVerticalAndHorizontalHoughBuckets(houghLocalMaxima, &verticalLines, &horizontalLines);
 
-			BNS_FOR_NAME(y, sobelHoughVoting.height) {
-				BNS_FOR_NAME(x, sobelHoughVoting.width) {
-					BNS_FOR_NAME(k, 3) {
-						votingViz.GetPixelPtr(x, y)[k] = *sobelHoughVoting.GetPixelPtr(x, y);
-					}
-				}
-			}
+		// TODO:
+		// Sort into horizontal and vertical buckets
+		// Sort by rho in each bucket
+		// Find pixel intersections
+		// Search for actual corners (subpixel opt?)
+		// Compute homographies
+		// Construct initial intrinsics solver
+		// Solve for initial K matrix
+		// Solve for camera rotation + translation
+		// Set up intrinsics + distortion optimiser
+		// Optimise everything
+
+		unsigned char colours[4][3] = {
+			{250, 10, 10},
+			{250, 120, 10},
+			{250, 250, 10},
+			{10, 250, 10}
+		};
+
+		if (0){
 
 			int expectedLineCount = 12;
 			int localMaxCount = BNS_MIN(houghLocalMaxima.count, expectedLineCount);
 
-			BNS_FOR_I(localMaxCount) {
-				auto localMax = houghLocalMaxima.data[i];
-				unsigned char* pixel = votingViz.GetPixelPtr(localMax.x, localMax.y);
-				pixel[0] = 0;
-				pixel[1] = 250;
-				pixel[2] = 0;
-			}
-
 			auto rgbImg = ConvertGSImageToRGB(img1);
 
-			BNS_FOR_I(localMaxCount) {
-				auto localMax = houghLocalMaxima.data[i];
-				float thetaDegrees = ((float)localMax.x - 90 * thetaResolutionPerDegree) / thetaResolutionPerDegree;
-				float rho = (localMax.y) - (votingViz.height / 2);
+			BNS_VEC_FOR_NAME(k, verticalLines) {
+				auto localMax = verticalLines.data[k];
+				float thetaDegrees = localMax.thetaDegrees;
+				float rho = localMax.rho;
 				float theta = thetaDegrees * BNS_DEG2RAD;
 				float cosTheta = cosf(theta), sinTheta = sinf(theta);
 
-				if (BNS_ABS(thetaDegrees) > 45) {
-					BNS_FOR_I(rgbImg.width) {
-						int x = i;
-						int y = (int)((rho - x * cosTheta) / sinTheta);
-						if (y >= 0 && y < rgbImg.height) {
+				BNS_FOR_J(rgbImg.height) {
+					int y = j;
+					int x = (int)((rho - y * sinTheta) / cosTheta);
+					if (x >= 0 && x < rgbImg.width) {
+						unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
 
-							unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
-
-							pixel[0] = 220;
-							pixel[1] = 0;
-							pixel[2] = 50;
-						}
-					}
-				} else {
-					BNS_FOR_J(rgbImg.height) {
-						int y = j;
-						int x = (int)((rho - y * sinTheta) / cosTheta);
-						if (x >= 0 && x < rgbImg.width) {
-							BNS_FOR_NAME(b, 3) {
-								unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
-
-								pixel[0] = 50;
-								pixel[1] = 0;
-								pixel[2] = 220;
-							}
-						}
+						pixel[0] = colours[k][0];
+						pixel[1] = colours[k][1];
+						pixel[2] = colours[k][2];
 					}
 				}
 			}
 
-				SaveRGBImageToPNGFile(StringStackBuffer<256>("voting_viz_%d.png", i).buffer, votingViz);
-				SaveRGBImageToPNGFile(StringStackBuffer<256>("line_viz_%d.png", i).buffer, rgbImg);
+			BNS_VEC_FOR_NAME(k, horizontalLines) {
+				auto localMax = horizontalLines.data[k];
+				float thetaDegrees = localMax.thetaDegrees;
+				float rho = localMax.rho;
+				float theta = thetaDegrees * BNS_DEG2RAD;
+				float cosTheta = cosf(theta), sinTheta = sinf(theta);
 
-			int xc = 0;
-			(void)xc;
-		}
+				BNS_FOR_J(rgbImg.width) {
+					int x = j;
+					int y = (int)((rho - x * cosTheta) / sinTheta);
+					if (y >= 0 && y < rgbImg.height) {
+						unsigned char* pixel = rgbImg.GetPixelPtr(x, y);
 
-		BNImage<unsigned char, 3> testOut(img1.width, img1.height);
-
-		BNS_FOR_J(img1.height) {
-			BNS_FOR_I(img1.width) {
-				float angle = *sobelAngle.GetPixelPtr(i, j);
-				float mag = *sobelGrad.GetPixelPtr(i, j);
-				float redness = sin(angle);
-				float blueness = cos(angle);
-
-				redness = BNS_ABS(redness);
-				blueness = BNS_ABS(blueness);
-
-				const float factor = 250.0f;
-
-				unsigned char* bgr = testOut.GetPixelPtr(i, j);
-				bgr[0] = (unsigned char)(blueness * mag * factor);
-				bgr[1] = (unsigned char)(redness * mag * factor);
-				bgr[2] = 0;
+						pixel[0] = colours[k][0];
+						pixel[1] = colours[k][1];
+						pixel[2] = colours[k][2];
+					}
+				}
 			}
-		}
 
-		SaveRGBImageToPNGFile(StringStackBuffer<256>("sobel_test_%d.png", i).buffer, testOut);
+			SaveRGBImageToPNGFile(StringStackBuffer<256>("line_viz_%d.png", i).buffer, rgbImg);
+		}
 	}
 
 	return 0;
