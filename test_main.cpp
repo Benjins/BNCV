@@ -84,71 +84,7 @@ CREATE_TEST_CASE("Camera calib") {
 		SobelResponseNonMaxFilter(sobelGrad, sobelAngle);
 
 		// Mask out the sobel response from the non-selected areas in the data files
-		{
-			FILE* pointsFile = fopen(StringStackBuffer<256>("%s.txt", filename.buffer).buffer, "rb");
-
-			if (pointsFile != NULL) {
-				// NOTE: We do assume that the points are in order (i.e. no diagonals),
-				// but we don't assume clockwise vs anti-clockwise
-				BNLM::Vector2f points[4];
-
-				BNS_ARRAY_FOR_J(points) {
-					fscanf(pointsFile, "%f %f", &points[j](0), &points[j](1));
-				}
-
-				fclose(pointsFile);
-
-				// TODO: Filtering...
-
-				BNLM::Vector2f centroid = BNLM::Vector2f::Zero();
-				BNLM::Vector2f minBounds = BNLM::Vector2f(FLT_MAX, FLT_MAX);
-				BNLM::Vector2f maxBounds = BNLM::Vector2f(-FLT_MAX, -FLT_MAX);
-				BNS_ARRAY_FOR_J(points) {
-					centroid += points[j];
-					minBounds.x() = BNS_MIN(minBounds.x(), points[j].x());
-					maxBounds.x() = BNS_MAX(maxBounds.x(), points[j].x());
-					minBounds.y() = BNS_MIN(minBounds.y(), points[j].y());
-					maxBounds.y() = BNS_MAX(maxBounds.y(), points[j].y());
-				}
-
-				centroid /= 4;
-
-				for (int y = 0; y < sobelGrad.height; y++) {
-					if (y < minBounds.y() || y > maxBounds.y()) {
-						for (int x = 0; x < sobelGrad.width; x++) {
-							*sobelGrad.GetPixelPtr(x, y) = 0;
-						}
-						continue;
-					}
-
-					for (int x = 0; x < sobelGrad.width; x++) {
-						if (x < minBounds.x() || x > maxBounds.x()) {
-							*sobelGrad.GetPixelPtr(x, y) = 0;
-							continue;
-						}
-
-						bool isInPoly = true;
-						BNS_FOR_J(4) {
-							int v0 = j, v1 = (j + 1) % 4;
-							BNLM::Vector2f edge = points[v1] - points[v0];
-							BNLM::Vector2f test1 = centroid - points[v0];
-							BNLM::Vector2f test2 = BNLM::Vector2f(x, y) - points[v0];
-							float sign1 = BNLM::CrossProduct(edge, test1);
-							float sign2 = BNLM::CrossProduct(edge, test2);
-
-							if (sign1 * sign2 < 0) {
-								isInPoly = false;
-								break;
-							}
-						}
-
-						if (!isInPoly) {
-							*sobelGrad.GetPixelPtr(x, y) = 0;
-						}
-					}
-				}
-			}
-		}
+		MaskOutSobelResponseInNonSelectedAreas(sobelGrad, filename.buffer);
 
 		const int thetaResolutionPerDegree = 10;
 
@@ -164,6 +100,27 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<CheckerboardCorner> checkerboardCorners;
 		FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
 
+		BNLM::Matrix3f H = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
+
+		auto checkerboardCornersCpy = checkerboardCorners;
+
+		RefineCheckerboardCornerPositionsInImage(img1, 4, &checkerboardCorners);
+
+		BNLM::Matrix3f H_refined = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
+
+		printf("-------------\n");
+		BNS_VEC_FOR_I(checkerboardCorners) {
+			auto* ptr1 = checkerboardCornersCpy.data + i;
+			auto* ptr2 = checkerboardCorners.data + i;
+			BNLM::Vector2f planePtReproj1 = (H * ptr1->planePt.homo()).hnorm();
+			BNLM::Vector2f planePtReproj2 = (H_refined * ptr2->planePt.homo()).hnorm();
+			float err1 = (planePtReproj1 - ptr1->imagePt).SquareMag();
+			float err2 = (planePtReproj2 - ptr2->imagePt).SquareMag();
+			{//if (err2 > 1.0f) {
+				printf("  Err1: %f Err2: %f\n", err1, err2);
+			}
+		}
+
 		// TODO:
 		// [X] Sort into horizontal and vertical buckets
 		// [X] Sort by rho in each bucket
@@ -176,7 +133,9 @@ CREATE_TEST_CASE("Camera calib") {
 		// [ ] Set up intrinsics + distortion optimiser
 		// [ ] Optimise everything
 
-		if (i < 10){
+
+
+		if (1){
 			auto rgbImg = ConvertGSImageToRGB(img1);
 
 			BNS_VEC_FOREACH(checkerboardCorners) {
