@@ -1,8 +1,320 @@
 #include "external/BNLM/core.h"
 
+#include "imgproc.h"
 
+struct CameraCalibrationSolverImage {
+	// world -> camera
+	BNLM::Vector3f rotation;
+	// world -> camera
+	BNLM::Vector3f translation;
 
+	Vector<CheckerboardCorner> checkerboardPoints;
+};
 
+struct CameraCalibrationSolverSystem {
+	Vector<CameraCalibrationSolverImage> solverImages;
+
+	float fx, fy;
+	float cx, cy;
+
+	BNLM::Vector2f distK;
+	BNLM::Vector2f distP;
+};
+
+void FindInitialCheckerboardCorners(const Vector<HoughLocalMaximum>& verticalLines,
+	const Vector<HoughLocalMaximum>& horizontalLines,
+	Vector<CheckerboardCorner>* outCorners) {
+	outCorners->Clear();
+	outCorners->EnsureCapacity(verticalLines.count * horizontalLines.count);
+
+	// Okay, new plan: since previously we were implictly using point-slope formula,
+	// and since the slope is well...infinite...
+	// we are now using 2-point x 2-point intersection (formula from wikipedia)
+	// https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line
+	// First we get two points on each line
+
+	BNS_VEC_FOR_I(horizontalLines) {
+
+		HoughLocalMaximum horizontalLine = horizontalLines.data[i];
+		float thetaDegrees1 = horizontalLine.thetaDegrees;
+		float rho1 = horizontalLine.rho;
+		float theta1 = thetaDegrees1 * BNS_DEG2RAD;
+
+		float a1 = cosf(theta1), b1 = sinf(theta1);
+		float x1 = a1 * rho1, y1 = b1 * rho1;
+		float x2 = x1 - 10 * b1;
+		float y2 = y1 + 10 * a1;
+
+		BNS_VEC_FOR_J(verticalLines) {
+			HoughLocalMaximum verticalLine = verticalLines.data[j];
+			int thetaDegrees2 = verticalLine.thetaDegrees;
+			float rho2 = verticalLine.rho;
+			float theta2 = thetaDegrees2 * BNS_DEG2RAD;
+
+			float a2 = cosf(theta2), b2 = sinf(theta2);
+			float x3 = a2 * rho2, y3 = b2 * rho2;
+			float x4 = x3 - 10 * b2;
+			float y4 = y3 + 10 * a2;
+
+			float denom = ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+
+			float imageX = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+
+			float imageY = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+
+			// TODO: Bounds check
+			CheckerboardCorner pt;
+			pt.imagePt = BNLM::Vector2f(imageX, imageY);
+			pt.planePt = BNLM::Vector2f(i, j);
+			outCorners->PushBack(pt);
+		}
+	}
+}
+
+inline float LerpFloat(float a, float b, float t) {
+	return a * (1.0f - t) + b * t;
+}
+
+inline float BilinearSampleOnImage(BNImage<unsigned char> img, BNLM::Vector2f pt) {
+	int x0 = (int)pt.x();
+	int y0 = (int)pt.y();
+
+	float fracX = pt.x() - x0;
+	float fracY = pt.y() - y0;
+
+	float val00 = *img.GetPixelPtr(x0, y0);
+	float val01 = *img.GetPixelPtr(x0, y0 + 1);
+	float val10 = *img.GetPixelPtr(x0 + 1, y0);
+	float val11 = *img.GetPixelPtr(x0 + 1, y0 + 1);
+
+	float val0 = LerpFloat(val00, val01, fracY);
+	float val1 = LerpFloat(val10, val11, fracY);
+	return LerpFloat(val0, val1, fracX) / 255.0f;
+}
+
+void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const int searchSize, Vector<CheckerboardCorner>* corners) {
+
+	const int searchSquareSize = 2 * searchSize + 1;
+
+	BNImage<float> gradScratch(searchSquareSize, searchSquareSize);
+	BNImage<float> angleScratch(searchSquareSize, searchSquareSize);
+
+	// TODO: Some code dup and some over-use of dynamic buffers... :p
+	BNS_VEC_FOREACH(*corners) {
+		int xStart = BNS_CLAMP(BNS_ROUND(ptr->imagePt.x() - searchSize), 0, img.width - 1);
+		int xEnd = BNS_CLAMP(BNS_ROUND(ptr->imagePt.x() + searchSize), 0, img.width - 1);
+		int yStart = BNS_CLAMP(BNS_ROUND(ptr->imagePt.y() - searchSize), 0, img.height - 1);
+		int yEnd = BNS_CLAMP(BNS_ROUND(ptr->imagePt.y() + searchSize), 0, img.height - 1);
+
+		auto subImg = img.GetSubImage(xStart, yStart, xEnd - xStart + 1, yEnd - yStart + 1);
+
+		SobelResponseOnImage(subImg, &gradScratch, &angleScratch);
+		SobelResponseNonMaxFilter(gradScratch, angleScratch);
+
+		const int thetaResolutionPerDegree = 10;
+		BNImage<short> sobelHoughVoting;
+		HoughTransformAfterSobel(gradScratch, angleScratch, thetaResolutionPerDegree, &sobelHoughVoting);
+
+		Vector<HoughLocalMaximum> houghLocalMaxima;
+		FindLocalMaximaInHoughTransform(sobelHoughVoting, thetaResolutionPerDegree, &houghLocalMaxima, 2, 5);
+
+		Vector<HoughLocalMaximum> verticalLines, horizontalLines;
+		FilterAndSortVerticalAndHorizontalHoughBuckets(houghLocalMaxima, &verticalLines, &horizontalLines);
+
+		BNS_VEC_DUMB_SORT(verticalLines, l.score > r.score);
+		BNS_VEC_DUMB_SORT(horizontalLines, l.score > r.score);
+
+		if (verticalLines.count > 0 && horizontalLines.count > 0) {
+			verticalLines.Resize(1);
+			horizontalLines.Resize(1);
+
+			Vector<CheckerboardCorner> checkerboardCorners;
+			FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
+
+			ASSERT(checkerboardCorners.count == 1);
+
+			ptr->imagePt = checkerboardCorners.data[0].imagePt + BNLM::Vector2f(xStart, yStart);
+		}
+	}
+}
+
+// We give an initial estimate for the checkerboard corner, and now look for a better one
+// in a local radius (since the initial guess didn't take distortion into account)
+// TODO: Like...any bounds checking?
+void RefineCheckerboardCornerPositionsInImageSubpixel(BNImage<unsigned char> img, const int searchSize, Vector<CheckerboardCorner>* corners) {
+
+	const int searchSquareSize = searchSize * 2 + 1;
+
+	BNImage<float> gradMask(searchSquareSize, searchSquareSize);
+
+	BNS_FOR_J(searchSquareSize) {
+		float yOff = j - searchSize;
+		float yMask = exp(-BNS_SQR(yOff));
+		BNS_FOR_I(searchSquareSize) {
+			float xOff = i - searchSize;
+			float xMask = exp(-BNS_SQR(xOff));
+			*gradMask.GetPixelPtr(i, j) = xMask * yMask;
+		}
+	}
+
+	BNImage<float> scratchVals(searchSquareSize + 2, searchSquareSize + 2);
+
+	BNS_VEC_FOREACH(*corners) {
+		// TODO:
+
+		BNLM::Vector2f currentGuess = ptr->imagePt;
+
+		int iter = 0;
+		const int maxIters = 20;
+
+		while (iter < maxIters) {
+
+			// Set up scratchVals w/ subpixel values
+			// Because we're doing bilinear filtering, we need an extra pixel border
+			// around the whole chunk
+			BNS_FOR_J(searchSquareSize + 2) {
+				float yOff = j - searchSize - 1;
+				BNS_FOR_I(searchSquareSize + 2) {
+					float xOff = i - searchSize - 1;
+					BNLM::Vector2f samplePt = currentGuess + BNLM::Vector2f(xOff, yOff);
+					*scratchVals.GetPixelPtr(i, j) = BilinearSampleOnImage(img, samplePt);
+				}
+			}
+
+			// | a b |
+			// | b c |  is the gradient...jacobian?
+			double a = 0, b = 0, c = 0, bb1 = 0, bb2 = 0;
+
+			BNImage<float> scratchValsSubImg = scratchVals.GetSubImage(1, 1, scratchVals.width - 2, scratchVals.height - 2);
+
+			BNS_FOR_J(searchSquareSize) {
+				float py = j - searchSize;
+				BNS_FOR_I(searchSquareSize) {
+					float px = i - searchSize;
+
+					//
+					double m = *gradMask.GetPixelPtr(i, j);
+
+					double tgx = *scratchValsSubImg.GetPixelPtrNoABC(i + 1, j) - *scratchValsSubImg.GetPixelPtrNoABC(i - 1, j);
+					double tgy = *scratchValsSubImg.GetPixelPtrNoABC(i, j + 1) - *scratchValsSubImg.GetPixelPtrNoABC(i, j - 1);
+
+					double gxx = tgx * tgx * m;
+					double gxy = tgx * tgy * m;
+					double gyy = tgy * tgy * m;
+
+					a += gxx;
+					b += gxy;
+					c += gyy;
+
+					bb1 += gxx * px + gxy * py;
+					bb2 += gxy * px + gyy * py;
+				}
+			}
+
+			double determinant = a * c - b * b;
+
+			if (BNS_ABS(determinant) <= 0.000001f) {
+				break;
+			}
+
+			double scale = 1.0 / determinant;
+
+			// TODO: Uhhh..doubles and floats??
+			//BNLM::Vector2f guessMovement(c * bb1 - b * bb2, -b * bb1 + a * bb2);
+
+			float newX = (float)(0.0f + c * scale*bb1 - b * scale*bb2);
+			float newY = (float)(0.0f - b * scale*bb1 + a * scale*bb2);
+
+			BNLM::Vector2f guessMovement(newX, newY);
+			float err = guessMovement.SquareMag();
+
+			if (err <= 0.0000001f) {
+				break;
+			}
+
+			currentGuess = currentGuess + guessMovement;
+
+			iter++;
+		}
+
+		float totalChangeSqr = (ptr->imagePt - currentGuess).SquareMag();
+
+		// TODO: Parameterise?
+		if (totalChangeSqr < 16.0f) {
+			ptr->imagePt = currentGuess;
+		}
+	}
+}
+
+BNLM::Matrix3f ComputeHomographyFromPointMatches(const BNLM::Vector2f* pts1, const BNLM::Vector2f* pts2, const int ptCount) {
+
+	int rowCount = 2 * ptCount;
+
+	BNLM::MatrixXf solverSystem(rowCount, 9);
+	solverSystem.ZeroOut();
+
+	BNS_FOR_I(ptCount) {
+
+		float u1 = pts1[i].x(), v1 = pts1[i].y();
+		float u2 = pts2[i].x(), v2 = pts2[i].y();
+
+		int r1 = i * 2, r2 = i * 2 + 1;
+
+		solverSystem(r1, 0) = u2;
+		solverSystem(r1, 1) = v2;
+		solverSystem(r1, 2) = 1;
+
+		solverSystem(r2, 3) = u2;
+		solverSystem(r2, 4) = v2;
+		solverSystem(r2, 5) = 1;
+
+		solverSystem(r1, 6) = -u1 * u2;
+		solverSystem(r1, 7) = -u1 * v2;
+		solverSystem(r1, 8) = -u1;
+
+		solverSystem(r2, 6) = -u2 * v1;
+		solverSystem(r2, 7) = -v1 * v2;
+		solverSystem(r2, 8) = -v1;
+
+	}
+
+	BNLM::MatrixXf U, V;
+	BNLM::VectorXf sigma;
+	BNLM::SingularValueDecomposition(solverSystem, &U, &sigma, &V);
+
+	ASSERT(V.cols == 9);
+	ASSERT(V.rows == 9);
+
+	BNLM::Matrix3f H;
+
+	BNS_FOR_J(3) {
+		BNS_FOR_I(3) {
+			H(j, i) = V(j * 3 + i, 8);
+		}
+	}
+
+	return H;
+}
+
+BNLM::Matrix3f ComputeHomographyFromCheckerboardCorners(const Vector<CheckerboardCorner>& corners, const float scaleFactor) {
+	Vector<BNLM::Vector2f> pts1;
+	Vector<BNLM::Vector2f> pts2;
+
+	pts1.EnsureCapacity(corners.count);
+	pts2.EnsureCapacity(corners.count);
+
+	BNS_VEC_FOR_I(corners) {
+		float u1 = corners.data[i].imagePt.x() / scaleFactor, v1 = corners.data[i].imagePt.y() / scaleFactor;
+		float u2 = corners.data[i].planePt.x(), v2 = corners.data[i].planePt.y();
+
+		pts1.PushBack(BNLM::Vector2f(u1, v1));
+		pts2.PushBack(BNLM::Vector2f(u2, v2));
+	}
+
+	ASSERT(pts1.count == pts2.count);
+
+	return ComputeHomographyFromPointMatches(pts1.data, pts2.data, pts1.count);
+}
 
 BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM::Matrix3f>& homographies, const float scaleFactor) {
 
@@ -63,6 +375,8 @@ BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM:
 	B(2, 1) = BVec(4);
 	B(2, 2) = BVec(5);
 
+	printf("Initial estimates of intrinsics:\n");
+
 	float cy = (-B(0, 0) * B(1, 2)) / (B(0, 0) * B(1, 1));
 	printf("cy: %f\n", cy * scaleFactor);
 
@@ -76,7 +390,84 @@ BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM:
 	float cx = -B(0, 2) * fx*fx / lambda;
 	printf("cx: %f\n", cx * scaleFactor);
 
-	return BNLM::Matrix3f();
+	BNLM::Matrix3f K = BNLM::Matrix3f::Identity();
+	K(0, 0) = fx * scaleFactor;
+	K(1, 1) = fy * scaleFactor;
+	K(0, 2) = cx * scaleFactor;
+	K(1, 2) = cy * scaleFactor;
+
+	return K;
+}
+
+void ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(CameraCalibrationSolverSystem* camCalib, const Vector<BNLM::Matrix3f>& homographies) {
+	ASSERT(camCalib->solverImages.count == homographies.count);
+
+	BNLM::Matrix3f intrinsics = BNLM::Matrix3f::Identity();
+	intrinsics(0, 0) = camCalib->fx;
+	intrinsics(1, 1) = camCalib->fy;
+	intrinsics(0, 2) = camCalib->cx;
+	intrinsics(1, 2) = camCalib->cy;
+
+	// We invert the intrinsics so we can multiply it out of the homography, and get just rotation + translation
+	BNLM::Matrix3f invIntrinsics = BNLM::Matrix3f::Identity();
+	invIntrinsics(0, 0) = 1.0f / intrinsics(0, 0);
+	invIntrinsics(1, 1) = 1.0f / intrinsics(1, 1);
+	invIntrinsics(0, 2) = -intrinsics(0, 2) * invIntrinsics(0, 0);
+	invIntrinsics(1, 2) = -intrinsics(1, 2) * invIntrinsics(1, 1);
+
+	BNS_VEC_FOR_I(camCalib->solverImages) {
+
+		BNLM::Matrix3f H = invIntrinsics * homographies.data[i];
+
+		//     |          |
+		// H = | r1  r2 t |
+		//     |          |
+		BNLM::Vector3f r1, r2, t;
+		BNS_FOR_J(3) {
+			r1(j) = H(j, 0);
+			r2(j) = H(j, 1);
+			t(j) = H(j, 2);
+		}
+
+		float r1Norm = r1.Mag();
+		float r2Norm = r2.Mag();
+
+		float tNorm = r1Norm + r2Norm;
+		r1 = r1 / r1Norm;
+		r2 = r2 / r2Norm;
+		t = t / tNorm;
+
+		float overlap = BNLM::DotProduct(r1, r2);
+
+		BNLM::Vector3f r3 = BNLM::CrossProduct(r1, r2).Normalized();
+		r2 = BNLM::CrossProduct(r3, r1);
+
+		BNLM::Matrix3f rotation;
+		rotation.block<3, 1>(0, 0) = r1;
+		rotation.block<3, 1>(0, 1) = r2;
+		rotation.block<3, 1>(0, 2) = r3;
+
+		BNS_VEC_FOREACH(camCalib->solverImages.data[i].checkerboardPoints) {
+			{
+				float diff = ((homographies.data[i] * ptr->planePt.homo()).hnorm() - ptr->imagePt).Mag();
+				printf("homography diff: %f\n", diff);
+			}
+
+			BNLM::Vector3f camSpace = rotation * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + t;
+			BNLM::Vector2f reproPt = (intrinsics * camSpace).hnorm();
+			BNLM::Vector2f diff = (reproPt - ptr->imagePt);
+			printf("diff: (%f %f)  mag: %f\n", diff.x(), diff.y(), diff.Mag());
+		}
+
+		int xc = 0;
+		(void)xc;
+	}
+}
+
+
+// 
+void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSolverSystem* camCalib) {
+
 }
 
 

@@ -72,6 +72,8 @@ CREATE_TEST_CASE("Camera calib") {
 	// TODO: File.Load(); and get all png files
 
 	Vector<BNLM::Matrix3f> homographies;
+	Vector<BNLM::Matrix3f> scaledHomographies;
+	CameraCalibrationSolverSystem camCalib;
 
 	const float scaleFactor = 512.0f;
 
@@ -106,29 +108,18 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<CheckerboardCorner> checkerboardCorners;
 		FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
 
-		BNLM::Matrix3f H = ComputeHomographyFromCheckerboardCorners(checkerboardCorners, scaleFactor);
-
-		//printf("   H|0: %f %f %f\n", H(0, 0), H(0, 1), H(0, 2));
-		//printf("   H|1: %f %f %f\n", H(1, 0), H(1, 1), H(1, 2));
-		//printf("   H|2: %f %f %f\n", H(2, 0), H(2, 1), H(2, 2));
-
-		homographies.PushBack(H);
+		scaledHomographies.PushBack(ComputeHomographyFromCheckerboardCorners(checkerboardCorners, scaleFactor));
+		homographies.PushBack(ComputeHomographyFromCheckerboardCorners(checkerboardCorners, 1.0f));
 
 		{//if (i == 21) {
 			RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
 			RefineCheckerboardCornerPositionsInImageSubpixel(img1, 6, &checkerboardCorners);
 		}
 
-		printf("----------------------\n", i);
 		printf("-----IMAGE %3d--------\n", i);
-		BNS_VEC_FOR_I(checkerboardCorners) {
-			auto* ptr1 = checkerboardCorners.data + i;
-			BNLM::Vector2f planePtReproj1 = (H * ptr1->planePt.homo()).hnorm() * scaleFactor;
-			float err1 = (planePtReproj1 - ptr1->imagePt).SquareMag();
-			if (err1 > 1.0f) {
-				printf("  Err1: %f\n", err1);
-			}
-		}
+		CameraCalibrationSolverImage camCalibImage;
+		camCalibImage.checkerboardPoints = checkerboardCorners;
+		camCalib.solverImages.PushBack(camCalibImage);
 
 		// TODO:
 		// [X] Sort into horizontal and vertical buckets
@@ -141,8 +132,6 @@ CREATE_TEST_CASE("Camera calib") {
 		// [ ] Solve for camera rotation + translation
 		// [ ] Set up intrinsics + distortion optimiser
 		// [ ] Optimise everything
-
-
 
 		if (0){
 			auto rgbImg = ConvertGSImageToRGB(img1);
@@ -160,7 +149,16 @@ CREATE_TEST_CASE("Camera calib") {
 		}
 	}
 
-	ComputeInitialIntrinsicsMatrixFromHomographies(homographies, scaleFactor);
+	BNLM::Matrix3f intrinsics = ComputeInitialIntrinsicsMatrixFromHomographies(scaledHomographies, scaleFactor);
+
+	camCalib.fx = intrinsics(0, 0);
+	camCalib.fy = intrinsics(1, 1);
+	camCalib.cx = intrinsics(0, 2);
+	camCalib.cy = intrinsics(1, 2);
+
+	ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(&camCalib, homographies);
+
+	OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(&camCalib);
 
 	return 0;
 }
