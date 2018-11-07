@@ -306,14 +306,11 @@ struct HoughLocalMaximum {
 	int score = 0;
 };
 
-void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaResolutionPerDegree, Vector<HoughLocalMaximum>* outLocalMaxima) {
+void FindLocalMaximaInHoughTransform(const BNImage<short>& voting, int thetaResolutionPerDegree, Vector<HoughLocalMaximum>* outLocalMaxima, const int localNeighboorhoodSizeRho = 10, const int minimumVoteCount = 60) {
 	const int thetaCount = voting.width;
 	const int rhoCount = voting.height;
 
-	const int localNeighboorhoodSizeRho = 10;
 	const int localNeighboorhoodSizeTheta = 4 * thetaResolutionPerDegree;
-	
-	const int minimumVoteCount = 60;
 
 	BNS_FOR_I(rhoCount) {
 		BNS_FOR_J(thetaCount) {
@@ -422,41 +419,43 @@ struct CheckerboardCorner {
 void FindInitialCheckerboardCorners(const Vector<HoughLocalMaximum>& verticalLines,
 									const Vector<HoughLocalMaximum>& horizontalLines,
 									Vector<CheckerboardCorner>* outCorners) {
-	//
-
 	outCorners->Clear();
 	outCorners->EnsureCapacity(verticalLines.count * horizontalLines.count);
 
-	// Line intersection:
-	// I swear, I just had this written down somewhere
-	// Please I hope it works
-	// a1x + b1y = c1
-	// a2x + b2y = c2
-	// a1/a2(a2x + b2y) = a1/a2*c2
-	// a1x + a1/a2*b2y = a1/a2*c2
-	// a1/a2*b2y - b1y = a1/a2*c2 - c1
-	// y = (a1/a2*c2 - c1) / (a1/a2 * b2  - b1)
-	// x = (c1 - b1y) / a1
+	// Okay, new plan: since previously we were implictly using point-slope formula,
+	// and since the slope is well...infinite...
+	// we are now using 2-point x 2-point intersection (formula from wikipedia)
+	// https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line
+	// First we get two points on each line
 
 	BNS_VEC_FOR_I(horizontalLines) {
 
 		HoughLocalMaximum horizontalLine = horizontalLines.data[i];
 		float thetaDegrees1 = horizontalLine.thetaDegrees;
-		float c1 = horizontalLine.rho;
+		float rho1 = horizontalLine.rho;
 		float theta1 = thetaDegrees1 * BNS_DEG2RAD;
 
 		float a1 = cosf(theta1), b1 = sinf(theta1);
+		float x1 = a1 * rho1, y1 = b1 * rho1;
+		float x2 = x1 - 10 * b1;
+		float y2 = y1 + 10 * a1;
 
 		BNS_VEC_FOR_J(verticalLines) {
 			HoughLocalMaximum verticalLine = verticalLines.data[j];
 			int thetaDegrees2 = verticalLine.thetaDegrees;
-			float c2 = verticalLine.rho;
+			float rho2 = verticalLine.rho;
 			float theta2 = thetaDegrees2 * BNS_DEG2RAD;
 
 			float a2 = cosf(theta2), b2 = sinf(theta2);
+			float x3 = a2 * rho2, y3 = b2 * rho2;
+			float x4 = x3 - 10 * b2;
+			float y4 = y3 + 10 * a2;
 
-			float imageY = (a1 / a2 * c2 - c1) / (a1 / a2 * b2 - b1);
-			float imageX = (c1 - b1 * imageY) / a1;
+			float denom = ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+
+			float imageX = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+
+			float imageY = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
 
 			// TODO: Bounds check
 			CheckerboardCorner pt;
@@ -488,10 +487,56 @@ inline float BilinearSampleOnImage(BNImage<unsigned char> img, BNLM::Vector2f pt
 	return LerpFloat(val0, val1, fracX) / 255.0f;
 }
 
+void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const int searchSize, Vector<CheckerboardCorner>* corners) {
+
+	const int searchSquareSize = 2 * searchSize + 1;
+
+	BNImage<float> gradScratch(searchSquareSize, searchSquareSize);
+	BNImage<float> angleScratch(searchSquareSize, searchSquareSize);
+
+	// TODO: Some code dup and some over-use of dynamic buffers... :p
+	BNS_VEC_FOREACH(*corners) {
+		int xStart = BNS_CLAMP(BNS_ROUND(ptr->imagePt.x() - searchSize), 0, img.width - 1);
+		int xEnd   = BNS_CLAMP(BNS_ROUND(ptr->imagePt.x() + searchSize), 0, img.width - 1);
+		int yStart = BNS_CLAMP(BNS_ROUND(ptr->imagePt.y() - searchSize), 0, img.height - 1);
+		int yEnd   = BNS_CLAMP(BNS_ROUND(ptr->imagePt.y() + searchSize), 0, img.height - 1);
+
+		auto subImg = img.GetSubImage(xStart, yStart, xEnd - xStart + 1, yEnd - yStart + 1);
+
+		SobelResponseOnImage(subImg, &gradScratch, &angleScratch);
+		SobelResponseNonMaxFilter(gradScratch, angleScratch);
+
+		const int thetaResolutionPerDegree = 10;
+		BNImage<short> sobelHoughVoting;
+		HoughTransformAfterSobel(gradScratch, angleScratch, thetaResolutionPerDegree, &sobelHoughVoting);
+
+		Vector<HoughLocalMaximum> houghLocalMaxima;
+		FindLocalMaximaInHoughTransform(sobelHoughVoting, thetaResolutionPerDegree, &houghLocalMaxima, 2, 5);
+
+		Vector<HoughLocalMaximum> verticalLines, horizontalLines;
+		FilterAndSortVerticalAndHorizontalHoughBuckets(houghLocalMaxima, &verticalLines, &horizontalLines);
+
+		BNS_VEC_DUMB_SORT(verticalLines, l.score > r.score);
+		BNS_VEC_DUMB_SORT(horizontalLines, l.score > r.score);
+
+		if (verticalLines.count > 0 && horizontalLines.count > 0) {
+			verticalLines.Resize(1);
+			horizontalLines.Resize(1);
+
+			Vector<CheckerboardCorner> checkerboardCorners;
+			FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
+
+			ASSERT(checkerboardCorners.count == 1);
+
+			ptr->imagePt = checkerboardCorners.data[0].imagePt + BNLM::Vector2f(xStart, yStart);
+		}
+	}
+}
+
 // We give an initial estimate for the checkerboard corner, and now look for a better one
 // in a local radius (since the initial guess didn't take distortion into account)
 // TODO: Like...any bounds checking?
-void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const int searchSize, Vector<CheckerboardCorner>* corners) {
+void RefineCheckerboardCornerPositionsInImageSubpixel(BNImage<unsigned char> img, const int searchSize, Vector<CheckerboardCorner>* corners) {
 
 	const int searchSquareSize = searchSize * 2 + 1;
 
@@ -590,7 +635,7 @@ void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const 
 		float totalChangeSqr = (ptr->imagePt - currentGuess).SquareMag();
 
 		// TODO: Parameterise?
-		{//if (totalChangeSqr < 100.0f) {
+		if (totalChangeSqr < 16.0f) {
 			ptr->imagePt = currentGuess;
 		}
 	}

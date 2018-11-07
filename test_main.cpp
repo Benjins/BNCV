@@ -114,18 +114,18 @@ CREATE_TEST_CASE("Camera calib") {
 
 		homographies.PushBack(H);
 
-		auto checkerboardCornersCpy = checkerboardCorners;
-
-		if (true || i == 3) {
-			//RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
+		{//if (i == 21) {
+			RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
+			RefineCheckerboardCornerPositionsInImageSubpixel(img1, 6, &checkerboardCorners);
 		}
 
-		printf("-------------\n");
+		printf("----------------------\n", i);
+		printf("-----IMAGE %3d--------\n", i);
 		BNS_VEC_FOR_I(checkerboardCorners) {
-			auto* ptr1 = checkerboardCornersCpy.data + i;
+			auto* ptr1 = checkerboardCorners.data + i;
 			BNLM::Vector2f planePtReproj1 = (H * ptr1->planePt.homo()).hnorm() * scaleFactor;
 			float err1 = (planePtReproj1 - ptr1->imagePt).SquareMag();
-			{//if (err1 > 1.0f) {
+			if (err1 > 1.0f) {
 				printf("  Err1: %f\n", err1);
 			}
 		}
@@ -134,17 +134,17 @@ CREATE_TEST_CASE("Camera calib") {
 		// [X] Sort into horizontal and vertical buckets
 		// [X] Sort by rho in each bucket
 		// [X] Find pixel intersections
-		// [ ] Search for actual corners (subpixel opt?)
-		// [ ] Compute homographies
-		// [ ] Construct initial intrinsics solver
-		// [ ] Solve for initial K matrix
+		// [X] Search for actual corners (subpixel opt?)
+		// [X] Compute homographies
+		// [X] Construct initial intrinsics solver
+		// [X] Solve for initial K matrix
 		// [ ] Solve for camera rotation + translation
 		// [ ] Set up intrinsics + distortion optimiser
 		// [ ] Optimise everything
 
 
 
-		if (1){
+		if (0){
 			auto rgbImg = ConvertGSImageToRGB(img1);
 
 			BNS_VEC_FOREACH(checkerboardCorners) {
