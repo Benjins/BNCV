@@ -533,35 +533,35 @@ void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const 
 
 			// | a b |
 			// | b c |  is the gradient...jacobian?
-			double sumGradXX = 0, sumGradXY = 0, sumGradYY = 0, bb1 = 0, bb2 = 0;
+			double a = 0, b = 0, c = 0, bb1 = 0, bb2 = 0;
+
+			BNImage<float> scratchValsSubImg = scratchVals.GetSubImage(1, 1, scratchVals.width - 2, scratchVals.height - 2);
 
 			BNS_FOR_J(searchSquareSize) {
-				float yOff = j - searchSize;
+				float py = j - searchSize;
 				BNS_FOR_I(searchSquareSize) {
-					float xOff = i - searchSize;
+					float px = i - searchSize;
+
 					//
-					double maskVal = *gradMask.GetPixelPtr(i, j);
+					double m = *gradMask.GetPixelPtr(i, j);
 
-					int scratchX = i + 1;
-					int scratchY = j + 1;
+					double tgx = *scratchValsSubImg.GetPixelPtrNoABC(i + 1, j) - *scratchValsSubImg.GetPixelPtrNoABC(i - 1, j);
+					double tgy = *scratchValsSubImg.GetPixelPtrNoABC(i, j + 1) - *scratchValsSubImg.GetPixelPtrNoABC(i, j - 1);
 
-					double xDiff = *scratchVals.GetPixelPtr(scratchX + 1, scratchY) - *scratchVals.GetPixelPtr(scratchX - 1, scratchY);
-					double yDiff = *scratchVals.GetPixelPtr(scratchX, scratchY + 1) - *scratchVals.GetPixelPtr(scratchX, scratchY - 1);
+					double gxx = tgx * tgx * m;
+					double gxy = tgx * tgy * m;
+					double gyy = tgy * tgy * m;
 
-					double gradientXX = BNS_SQR(xDiff) * maskVal;
-					double gradientYY = BNS_SQR(yDiff) * maskVal;
-					double gradientXY = xDiff * yDiff * maskVal;
+					a += gxx;
+					b += gxy;
+					c += gyy;
 
-					sumGradXX += gradientXX;
-					sumGradXY += gradientXY;
-					sumGradYY += gradientYY;
-
-					bb1 += gradientXX * xOff + gradientXY * yOff;
-					bb2 += gradientXY * xOff + gradientYY * yOff;
+					bb1 += gxx * px + gxy * py;
+					bb2 += gxy * px + gyy * py;
 				}
 			}
 
-			double determinant = sumGradXX * sumGradYY - BNS_SQR(sumGradXY);
+			double determinant = a * c - b * b;
 
 			if (BNS_ABS(determinant) <= 0.000001f) {
 				break;
@@ -570,8 +570,12 @@ void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const 
 			double scale = 1.0 / determinant;
 
 			// TODO: Uhhh..doubles and floats??
-			BNLM::Vector2f guessMovement(sumGradYY*bb1 - sumGradXY * bb2, -sumGradXY * bb1 + sumGradXX * bb2);
-			guessMovement = guessMovement * scale;
+			//BNLM::Vector2f guessMovement(c * bb1 - b * bb2, -b * bb1 + a * bb2);
+
+			float newX = (float)(0.0f + c * scale*bb1 - b * scale*bb2);
+			float newY = (float)(0.0f - b * scale*bb1 + a * scale*bb2);
+
+			BNLM::Vector2f guessMovement (newX, newY);
 			float err = guessMovement.SquareMag();
 
 			if (err <= 0.0000001f) {
@@ -583,7 +587,12 @@ void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const 
 			iter++;
 		}
 
-		ptr->imagePt = currentGuess;
+		float totalChangeSqr = (ptr->imagePt - currentGuess).SquareMag();
+
+		// TODO: Parameterise?
+		{//if (totalChangeSqr < 100.0f) {
+			ptr->imagePt = currentGuess;
+		}
 	}
 }
 
@@ -594,8 +603,8 @@ BNLM::Matrix3f ComputeHomographyFromCheckerboardCorners(const Vector<Checkerboar
 	solverSystem.ZeroOut();
 
 	BNS_VEC_FOR_I(corners) {
-		float u1 = corners.data[i].imagePt.x(), v1 = corners.data[i].imagePt.y();
-		float u2 = corners.data[i].planePt.x(), v2 = corners.data[i].planePt.y();
+		float u1 = corners.data[i].imagePt.x() * (1.0f / 512.0f), v1 = corners.data[i].imagePt.y() * (1.0f / 512.0f);
+		float u2 = corners.data[i].planePt.x() * (1.0f / 512.0f), v2 = corners.data[i].planePt.y() * (1.0f / 512.0f);
 
 		int r1 = i * 2, r2 = i * 2 + 1;
 

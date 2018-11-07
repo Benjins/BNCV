@@ -4,6 +4,7 @@
 
 #include "BNImage.h"
 
+#include "cam_calib.cpp"
 #include "sfm_bootstrap.cpp"
 #include "imgproc.cpp"
 #include "feature_matching.cpp"
@@ -69,6 +70,9 @@ CREATE_TEST_CASE("Camera calib") {
 
 	//BNS_ARRAY_FOR_I(filenames) {
 	// TODO: File.Load(); and get all png files
+
+	Vector<BNLM::Matrix3f> homographies;
+
 	BNS_FOR_I(45) {
 		StringStackBuffer<256> filename("C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_%05d_Y.png", i);
 
@@ -102,9 +106,17 @@ CREATE_TEST_CASE("Camera calib") {
 
 		BNLM::Matrix3f H = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
 
+		printf("   H|0: %f %f %f\n", H(0, 0), H(0, 1), H(0, 2));
+		printf("   H|1: %f %f %f\n", H(1, 0), H(1, 1), H(1, 2));
+		printf("   H|2: %f %f %f\n", H(2, 0), H(2, 1), H(2, 2));
+
+		homographies.PushBack(H);
+
 		auto checkerboardCornersCpy = checkerboardCorners;
 
-		RefineCheckerboardCornerPositionsInImage(img1, 4, &checkerboardCorners);
+		if (true || i == 3) {
+			RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
+		}
 
 		BNLM::Matrix3f H_refined = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
 
@@ -150,6 +162,8 @@ CREATE_TEST_CASE("Camera calib") {
 			SaveRGBImageToPNGFile(StringStackBuffer<256>("line_viz_%d.png", i).buffer, rgbImg);
 		}
 	}
+
+	ComputeInitialIntrinsicsMatrixFromHomographies(homographies);
 
 	return 0;
 }
