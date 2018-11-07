@@ -73,6 +73,8 @@ CREATE_TEST_CASE("Camera calib") {
 
 	Vector<BNLM::Matrix3f> homographies;
 
+	const float scaleFactor = 512.0f;
+
 	BNS_FOR_I(45) {
 		StringStackBuffer<256> filename("C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_%05d_Y.png", i);
 
@@ -104,32 +106,27 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<CheckerboardCorner> checkerboardCorners;
 		FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
 
-		BNLM::Matrix3f H = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
+		BNLM::Matrix3f H = ComputeHomographyFromCheckerboardCorners(checkerboardCorners, scaleFactor);
 
-		printf("   H|0: %f %f %f\n", H(0, 0), H(0, 1), H(0, 2));
-		printf("   H|1: %f %f %f\n", H(1, 0), H(1, 1), H(1, 2));
-		printf("   H|2: %f %f %f\n", H(2, 0), H(2, 1), H(2, 2));
+		//printf("   H|0: %f %f %f\n", H(0, 0), H(0, 1), H(0, 2));
+		//printf("   H|1: %f %f %f\n", H(1, 0), H(1, 1), H(1, 2));
+		//printf("   H|2: %f %f %f\n", H(2, 0), H(2, 1), H(2, 2));
 
 		homographies.PushBack(H);
 
 		auto checkerboardCornersCpy = checkerboardCorners;
 
 		if (true || i == 3) {
-			RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
+			//RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
 		}
-
-		BNLM::Matrix3f H_refined = ComputeHomographyFromCheckerboardCorners(checkerboardCorners);
 
 		printf("-------------\n");
 		BNS_VEC_FOR_I(checkerboardCorners) {
 			auto* ptr1 = checkerboardCornersCpy.data + i;
-			auto* ptr2 = checkerboardCorners.data + i;
-			BNLM::Vector2f planePtReproj1 = (H * ptr1->planePt.homo()).hnorm();
-			BNLM::Vector2f planePtReproj2 = (H_refined * ptr2->planePt.homo()).hnorm();
+			BNLM::Vector2f planePtReproj1 = (H * ptr1->planePt.homo()).hnorm() * scaleFactor;
 			float err1 = (planePtReproj1 - ptr1->imagePt).SquareMag();
-			float err2 = (planePtReproj2 - ptr2->imagePt).SquareMag();
-			{//if (err2 > 1.0f) {
-				printf("  Err1: %f Err2: %f\n", err1, err2);
+			{//if (err1 > 1.0f) {
+				printf("  Err1: %f\n", err1);
 			}
 		}
 
@@ -163,7 +160,7 @@ CREATE_TEST_CASE("Camera calib") {
 		}
 	}
 
-	ComputeInitialIntrinsicsMatrixFromHomographies(homographies);
+	ComputeInitialIntrinsicsMatrixFromHomographies(homographies, scaleFactor);
 
 	return 0;
 }

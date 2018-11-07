@@ -4,7 +4,7 @@
 
 
 
-BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM::Matrix3f>& homographies) {
+BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM::Matrix3f>& homographies, const float scaleFactor) {
 
 	BNLM::MatrixXf BSystem(2 * homographies.count, 6);
 	BSystem.ZeroOut();
@@ -62,8 +62,6 @@ BNLM::Matrix3f ComputeInitialIntrinsicsMatrixFromHomographies(const Vector<BNLM:
 	B(1, 2) = BVec(4);
 	B(2, 1) = BVec(4);
 	B(2, 2) = BVec(5);
-
-	const float scaleFactor = 512.0f;
 
 	float cy = (-B(0, 0) * B(1, 2)) / (B(0, 0) * B(1, 1));
 	printf("cy: %f\n", cy * scaleFactor);

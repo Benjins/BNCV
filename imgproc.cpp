@@ -596,15 +596,15 @@ void RefineCheckerboardCornerPositionsInImage(BNImage<unsigned char> img, const 
 	}
 }
 
-BNLM::Matrix3f ComputeHomographyFromCheckerboardCorners(const Vector<CheckerboardCorner>& corners) {
+BNLM::Matrix3f ComputeHomographyFromCheckerboardCorners(const Vector<CheckerboardCorner>& corners, const float scaleFactor) {
 	int rowCount = 2 * corners.count;
 
 	BNLM::MatrixXf solverSystem(rowCount, 9);
 	solverSystem.ZeroOut();
 
 	BNS_VEC_FOR_I(corners) {
-		float u1 = corners.data[i].imagePt.x() * (1.0f / 512.0f), v1 = corners.data[i].imagePt.y() * (1.0f / 512.0f);
-		float u2 = corners.data[i].planePt.x() * (1.0f / 512.0f), v2 = corners.data[i].planePt.y() * (1.0f / 512.0f);
+		float u1 = corners.data[i].imagePt.x() / scaleFactor, v1 = corners.data[i].imagePt.y() / scaleFactor;
+		float u2 = corners.data[i].planePt.x(), v2 = corners.data[i].planePt.y();
 
 		int r1 = i * 2, r2 = i * 2 + 1;
 
