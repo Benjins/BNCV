@@ -442,22 +442,187 @@ void ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(CameraCalibrationSolv
 		rotation.block<3, 1>(0, 1) = r2;
 		rotation.block<3, 1>(0, 2) = r3;
 
-		BNImage<unsigned char, 3> dbgImg(640, 480);
-		memset(dbgImg.baseData, 0, 640 * 480);
+		camCalib->solverImages.data[i].rotation = ConvertRotationMatrixToEulerAngles(rotation);
+		camCalib->solverImages.data[i].translation = t;
 
-		BNS_VEC_FOREACH(camCalib->solverImages.data[i].checkerboardPoints) {
-			BNLM::Vector3f camSpace = rotation * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + t;
-			BNLM::Vector2f reproPt = (intrinsics * camSpace).hnorm();
-			BNLM::Vector2f diff = (reproPt - ptr->imagePt);
-			printf("diff: %f\n", diff.SquareMag());
-		}
+		//BNS_VEC_FOREACH(camCalib->solverImages.data[i].checkerboardPoints) {
+		//	BNLM::Vector3f camSpace = rotation * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + t;
+		//	BNLM::Vector2f reproPt = (intrinsics * camSpace).hnorm();
+		//	BNLM::Vector2f diff = (reproPt - ptr->imagePt);
+		//	printf("diff: %f\n", diff.SquareMag());
+		//}
 	}
 }
 
+BNLM::Vector2f GetImagePointForCameraSpacePoint(CameraCalibrationSolverSystem* camCalib, const BNLM::Vector3f camSpace) {
+	float screenX = camSpace.x() / camSpace.z();
+	float screenY = camSpace.y() / camSpace.z();
+
+	float r2 = BNS_SQR(screenX) + BNS_SQR(screenY);
+
+	// Re-distort
+	// TODO: Tangential distortion as well
+	screenX = screenX / (1.0f + camCalib->distK(0) * r2 + camCalib->distK(1) * BNS_SQR(r2));
+	screenY = screenY / (1.0f + camCalib->distK(0) * r2 + camCalib->distK(1) * BNS_SQR(r2));
+
+	BNLM::Vector2f pixelPt;
+	pixelPt.x() = camCalib->fx * screenX + camCalib->cx;
+	pixelPt.y() = camCalib->fy * screenY + camCalib->cy;
+
+	return pixelPt;
+}
+
+float ComputeReprojectionErrorForSolverImage(CameraCalibrationSolverSystem* camCalib, int imageIndex) {
+	ASSERT(imageIndex < camCalib->solverImages.count);
+
+	float totalErr = 0.0f;
+
+	auto* calibImage = &camCalib->solverImages.data[imageIndex];
+
+	BNLM::Matrix3f rotationMat = BNLM::ConvertEulerAnglesToRotationMatrix(calibImage->rotation);
+
+	BNS_VEC_FOREACH(calibImage->checkerboardPoints) {
+		BNLM::Vector3f cameraSpace = rotationMat * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + calibImage->translation;
+		BNLM::Vector2f pixelReprojection = GetImagePointForCameraSpacePoint(camCalib, cameraSpace);
+		totalErr += (ptr->imagePt - pixelReprojection).SquareMag();
+	}
+
+	return totalErr;
+}
+
+float ComputeReprojectionErrorForSolverSystem(CameraCalibrationSolverSystem* camCalib) {
+	float totalErr = 0.0f;
+
+	BNS_VEC_FOR_I(camCalib->solverImages) {
+		totalErr += ComputeReprojectionErrorForSolverImage(camCalib, i);
+	}
+
+	return totalErr;
+}
 
 // 
 void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSolverSystem* camCalib) {
+	// TODO: distP as well
+	const int intrinsicsParamCount = 6;
 
+	const int parameterCount = intrinsicsParamCount + 6 * camCalib->solverImages.count;
+
+	Vector<float*> manipulableFloats;
+	manipulableFloats.EnsureCapacity(parameterCount);
+
+	manipulableFloats.PushBack(&camCalib->fx);
+	manipulableFloats.PushBack(&camCalib->fy);
+	manipulableFloats.PushBack(&camCalib->cx);
+	manipulableFloats.PushBack(&camCalib->cy);
+	manipulableFloats.PushBack(&camCalib->distK.x());
+	manipulableFloats.PushBack(&camCalib->distK.y());
+
+
+	BNS_VEC_FOREACH(camCalib->solverImages) {
+		BNS_FOR_I(3) {
+			manipulableFloats.PushBack(&ptr->rotation(i));
+			manipulableFloats.PushBack(&ptr->translation(i));
+		}
+	}
+
+	ASSERT(manipulableFloats.count == parameterCount);
+
+	Vector<float> errorDifferences;
+	errorDifferences.EnsureCapacity(parameterCount);
+
+	float stepSize = 512.0f;
+	const float minStepSize = 0.0000001f;
+
+	int iter = 0;
+	const int maxIters = 1000;
+
+	const float calcStep = 0.0001f;
+
+	float previousError = ComputeReprojectionErrorForSolverSystem(camCalib);
+	printf("Starting reprojection error: %f\n", previousError);
+
+	auto calcErrorForParameter = [=](int paramIdx) {
+		if (paramIdx < intrinsicsParamCount) {
+			return ComputeReprojectionErrorForSolverSystem(camCalib);
+		}
+		else {
+			const int imageIndex = (paramIdx - 6) / 6;
+			return ComputeReprojectionErrorForSolverImage(camCalib, imageIndex);
+		}
+	};
+
+	Vector<float> previousVals;
+	previousVals.Resize(parameterCount);
+
+	while (stepSize > minStepSize && iter < maxIters) {
+		errorDifferences.Clear();
+
+		BNS_FOR_I(parameterCount) {
+			float prevVal = *manipulableFloats.data[i];
+
+			*manipulableFloats.data[i] = prevVal - calcStep;
+			float newErr0 = calcErrorForParameter(i);
+
+			*manipulableFloats.data[i] = prevVal + calcStep;
+			float newErr1 = calcErrorForParameter(i);
+
+			// Compute partial derivate of error function w.r.t. this parameter
+			errorDifferences.PushBack((newErr1 - newErr0) / (calcStep * 2.0f));
+
+			*manipulableFloats.data[i] = prevVal;
+		}
+
+		float totalMagnitude = 0.0f;
+		BNS_VEC_FOLDR(totalMagnitude, errorDifferences, 0.0f, acc = acc + BNS_SQR(item));
+
+		if (totalMagnitude == 0.0f) {
+			printf("totalMagnitude is zero, exiting!\n");
+			break;
+		}
+
+		// Scale the error differences to a unit-length vector
+		float s = 1.0f / sqrt(totalMagnitude);
+		BNS_VEC_FOREACH(errorDifferences) {
+			*ptr *= s;
+		}
+
+		float currentError = 0.0f;
+
+		do {
+			// Save the parameters old value (in case it needs to be reset)
+			BNS_FOR_I(parameterCount) {
+				float prevVal = *manipulableFloats.data[i];
+				previousVals.data[i] = prevVal;
+				*manipulableFloats.data[i] = prevVal - errorDifferences.data[i] * stepSize;
+			}
+
+			currentError = ComputeReprojectionErrorForSolverSystem(camCalib);
+
+			if (currentError < previousError) {
+				previousError = currentError;
+				break;
+			}
+			else {
+				// Reset the parameters
+				BNS_FOR_I(parameterCount) {
+					*manipulableFloats.data[i] = previousVals.data[i];
+				}
+				stepSize = stepSize / 2.0f;
+			}
+		} while (stepSize > minStepSize && currentError > previousError);
+
+		iter++;
+	}
+
+	printf("New reprojection error: %f\n", previousError);
+
+	printf("Optimised values:\n");
+	printf("  fx: %f:\n", camCalib->fx);
+	printf("  fy: %f:\n", camCalib->fy);
+	printf("  cx: %f:\n", camCalib->cx);
+	printf("  cy: %f:\n", camCalib->cy);
+	printf("  k1: %f:\n", camCalib->distK(0));
+	printf("  k2: %f:\n", camCalib->distK(1));
 }
 
 
