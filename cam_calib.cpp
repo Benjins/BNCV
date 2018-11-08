@@ -17,8 +17,8 @@ struct CameraCalibrationSolverSystem {
 	float fx, fy;
 	float cx, cy;
 
-	BNLM::Vector2f distK;
-	BNLM::Vector2f distP;
+	BNLM::Vector2f distK = BNLM::Vector2f::Zero();
+	BNLM::Vector2f distP = BNLM::Vector2f::Zero();
 };
 
 void FindInitialCheckerboardCorners(const Vector<HoughLocalMaximum>& verticalLines,
