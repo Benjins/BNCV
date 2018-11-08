@@ -534,7 +534,7 @@ void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSol
 	const float minStepSize = 0.0000001f;
 
 	int iter = 0;
-	const int maxIters = 1000;
+	const int maxIters = 25 * 1000;
 
 	const float calcStep = 0.0001f;
 
@@ -612,9 +612,21 @@ void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSol
 		} while (stepSize > minStepSize && currentError > previousError);
 
 		iter++;
+
+		if (iter % 100 == 0) {
+			printf("New reprojection error: %f after %d runs\n", previousError, iter);
+
+			printf("Optimised values:\n");
+			printf("  fx: %f:\n", camCalib->fx);
+			printf("  fy: %f:\n", camCalib->fy);
+			printf("  cx: %f:\n", camCalib->cx);
+			printf("  cy: %f:\n", camCalib->cy);
+			printf("  k1: %f:\n", camCalib->distK(0));
+			printf("  k2: %f:\n", camCalib->distK(1));
+		}
 	}
 
-	printf("New reprojection error: %f\n", previousError);
+	printf("New reprojection error: %f after %d runs\n", previousError, iter);
 
 	printf("Optimised values:\n");
 	printf("  fx: %f:\n", camCalib->fx);

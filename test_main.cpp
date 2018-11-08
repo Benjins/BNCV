@@ -164,6 +164,9 @@ CREATE_TEST_CASE("Camera calib") {
 }
 
 CREATE_TEST_CASE("Singular vals fuzz") {
+
+	ASSERT(false);
+
 	const int testSeed = 100;
 	printf("Seeding sing vals test w/ %d\n", testSeed);
 	srand(testSeed);
