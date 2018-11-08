@@ -77,8 +77,12 @@ CREATE_TEST_CASE("Camera calib") {
 
 	const float scaleFactor = 512.0f;
 
-	BNS_FOR_I(45) {
-		StringStackBuffer<256> filename("C:/Users/Benji/CVDatasets/android_lg_g5/still_1541345512_edit/image_%05d_Y.png", i);
+	BNS_FOR_I(43) {
+		if (i % 5 == 3) {
+			//continue;
+		}
+
+		StringStackBuffer<256> filename("C:/Users/Benji/CVDatasets/android_lg_g5/still_1541703039/image_%05d_Y.png", i);
 
 		auto img1 = LoadGSImageFromFile(filename.buffer);
 
@@ -108,12 +112,22 @@ CREATE_TEST_CASE("Camera calib") {
 		Vector<CheckerboardCorner> checkerboardCorners;
 		FindInitialCheckerboardCorners(verticalLines, horizontalLines, &checkerboardCorners);
 
+		printf("-----------------------\n");
+		printf("---------IMGPTS--------\n");
+		BNS_VEC_FOREACH(checkerboardCorners) {
+			float imageX = ptr->imagePt.x();
+			float imageY = ptr->imagePt.y();
+			printf("  Image pt: (%f %f)\n", imageX, imageY);
+		}
+
+		printf("\n");
+
 		scaledHomographies.PushBack(ComputeHomographyFromCheckerboardCorners(checkerboardCorners, scaleFactor));
 		homographies.PushBack(ComputeHomographyFromCheckerboardCorners(checkerboardCorners, 1.0f));
 
 		{//if (i == 21) {
-			RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
-			RefineCheckerboardCornerPositionsInImageSubpixel(img1, 6, &checkerboardCorners);
+			//RefineCheckerboardCornerPositionsInImage(img1, 10, &checkerboardCorners);
+			//RefineCheckerboardCornerPositionsInImageSubpixel(img1, 6, &checkerboardCorners);
 		}
 
 		printf("-----IMAGE %3d--------\n", i);
@@ -129,9 +143,9 @@ CREATE_TEST_CASE("Camera calib") {
 		// [X] Compute homographies
 		// [X] Construct initial intrinsics solver
 		// [X] Solve for initial K matrix
-		// [ ] Solve for camera rotation + translation
-		// [ ] Set up intrinsics + distortion optimiser
-		// [ ] Optimise everything
+		// [X] Solve for camera rotation + translation
+		// [X] Set up intrinsics + distortion optimiser
+		// [X] Optimise everything
 
 		if (0){
 			auto rgbImg = ConvertGSImageToRGB(img1);
@@ -158,7 +172,19 @@ CREATE_TEST_CASE("Camera calib") {
 
 	ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(&camCalib, homographies);
 
+	float ratio = camCalib.fy / camCalib.fx;
+	BNS_VEC_FOREACH(camCalib.solverImages) {
+		ptr->focalScale = camCalib.fx;
+	}
+
+	camCalib.fx = 1.0f;
+	camCalib.fy = ratio;
+
 	OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(&camCalib);
+
+	BNS_VEC_FOREACH(camCalib.solverImages) {
+		//printf("    fx: %f\n", camCalib.fx * ptr->focalScale);
+	}
 
 	return 0;
 }

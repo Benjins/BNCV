@@ -174,6 +174,8 @@ struct BNImage {
 	}
 };
 
+// TODO:
+BNImage<int> LoadARGBImageFromFile(const char* filename);
 
 struct BN_RGB {
 	union {

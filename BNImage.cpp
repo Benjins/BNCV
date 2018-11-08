@@ -54,3 +54,16 @@ void SaveRGBImageToPNGFile(const char* filename, BNImage<unsigned char, 3> img) 
 	stbi_write_png(filename, img.width, img.height, 3, img.imageStart, img.strideInBytes);
 }
 
+BNImage<int> LoadARGBImageFromFile(const char* filename) {
+	int x, y, n;
+	unsigned char* data = stbi_load(filename, &x, &y, &n, 4);
+
+	BNImage<int> imgRaw(x, y, data);
+
+	BNImage<int> imgCpy = imgRaw.GetDeepCopy();
+
+	stbi_image_free(data);
+
+	return imgCpy;
+}
+

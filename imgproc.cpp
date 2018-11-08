@@ -1,5 +1,7 @@
 #include "BNImage.h"
 
+#include "imgproc.h"
+
 #include "external/BNLM/core.h"
 
 #include "external/BNLM/CppUtils/macros.h"

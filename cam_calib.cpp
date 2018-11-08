@@ -8,6 +8,8 @@ struct CameraCalibrationSolverImage {
 	// world -> camera
 	BNLM::Vector3f translation;
 
+	float focalScale = 1.0f;
+
 	Vector<CheckerboardCorner> checkerboardPoints;
 };
 
@@ -454,7 +456,7 @@ void ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(CameraCalibrationSolv
 	}
 }
 
-BNLM::Vector2f GetImagePointForCameraSpacePoint(CameraCalibrationSolverSystem* camCalib, const BNLM::Vector3f camSpace) {
+BNLM::Vector2f GetImagePointForCameraSpacePoint(CameraCalibrationSolverSystem* camCalib, CameraCalibrationSolverImage* image, const BNLM::Vector3f camSpace) {
 	float screenX = camSpace.x() / camSpace.z();
 	float screenY = camSpace.y() / camSpace.z();
 
@@ -466,8 +468,8 @@ BNLM::Vector2f GetImagePointForCameraSpacePoint(CameraCalibrationSolverSystem* c
 	screenY = screenY / (1.0f + camCalib->distK(0) * r2 + camCalib->distK(1) * BNS_SQR(r2));
 
 	BNLM::Vector2f pixelPt;
-	pixelPt.x() = camCalib->fx * screenX + camCalib->cx;
-	pixelPt.y() = camCalib->fy * screenY + camCalib->cy;
+	pixelPt.x() = camCalib->fx * image->focalScale * screenX + camCalib->cx;
+	pixelPt.y() = camCalib->fy * image->focalScale * screenY + camCalib->cy;
 
 	return pixelPt;
 }
@@ -483,7 +485,7 @@ float ComputeReprojectionErrorForSolverImage(CameraCalibrationSolverSystem* camC
 
 	BNS_VEC_FOREACH(calibImage->checkerboardPoints) {
 		BNLM::Vector3f cameraSpace = rotationMat * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + calibImage->translation;
-		BNLM::Vector2f pixelReprojection = GetImagePointForCameraSpacePoint(camCalib, cameraSpace);
+		BNLM::Vector2f pixelReprojection = GetImagePointForCameraSpacePoint(camCalib, calibImage, cameraSpace);
 		totalErr += (ptr->imagePt - pixelReprojection).SquareMag();
 	}
 
@@ -503,14 +505,14 @@ float ComputeReprojectionErrorForSolverSystem(CameraCalibrationSolverSystem* cam
 // 
 void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSolverSystem* camCalib) {
 	// TODO: distP as well
-	const int intrinsicsParamCount = 6;
+	const int intrinsicsParamCount = 5;
 
-	const int parameterCount = intrinsicsParamCount + 6 * camCalib->solverImages.count;
+	const int parameterCount = intrinsicsParamCount + 7 * camCalib->solverImages.count;
 
 	Vector<float*> manipulableFloats;
 	manipulableFloats.EnsureCapacity(parameterCount);
 
-	manipulableFloats.PushBack(&camCalib->fx);
+	//manipulableFloats.PushBack(&camCalib->fx);
 	manipulableFloats.PushBack(&camCalib->fy);
 	manipulableFloats.PushBack(&camCalib->cx);
 	manipulableFloats.PushBack(&camCalib->cy);
@@ -523,6 +525,7 @@ void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSol
 			manipulableFloats.PushBack(&ptr->rotation(i));
 			manipulableFloats.PushBack(&ptr->translation(i));
 		}
+		manipulableFloats.PushBack(&ptr->focalScale);
 	}
 
 	ASSERT(manipulableFloats.count == parameterCount);
@@ -546,7 +549,7 @@ void OptimiseExtrinsicsAndIntrinsicsAndDistrotionForCameras(CameraCalibrationSol
 			return ComputeReprojectionErrorForSolverSystem(camCalib);
 		}
 		else {
-			const int imageIndex = (paramIdx - 6) / 6;
+			const int imageIndex = (paramIdx - intrinsicsParamCount) / 7;
 			return ComputeReprojectionErrorForSolverImage(camCalib, imageIndex);
 		}
 	};
