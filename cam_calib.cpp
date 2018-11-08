@@ -422,17 +422,12 @@ void ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(CameraCalibrationSolv
 		//     |          |
 		// H = | r1  r2 t |
 		//     |          |
-		BNLM::Vector3f r1, r2, t;
-		BNS_FOR_J(3) {
-			r1(j) = H(j, 0);
-			r2(j) = H(j, 1);
-			t(j) = H(j, 2);
-		}
+		BNLM::Vector3f r1 = H.column(0), r2 = H.column(1), t = H.column(2);
 
 		float r1Norm = r1.Mag();
 		float r2Norm = r2.Mag();
 
-		float tNorm = r1Norm + r2Norm;
+		float tNorm = (r1Norm + r2Norm) * 0.5f;
 		r1 = r1 / r1Norm;
 		r2 = r2 / r2Norm;
 		t = t / tNorm;
@@ -447,20 +442,15 @@ void ComputeInitialExtrinsicsFromHomographiesAndIntrinsics(CameraCalibrationSolv
 		rotation.block<3, 1>(0, 1) = r2;
 		rotation.block<3, 1>(0, 2) = r3;
 
-		BNS_VEC_FOREACH(camCalib->solverImages.data[i].checkerboardPoints) {
-			{
-				float diff = ((homographies.data[i] * ptr->planePt.homo()).hnorm() - ptr->imagePt).Mag();
-				printf("homography diff: %f\n", diff);
-			}
+		BNImage<unsigned char, 3> dbgImg(640, 480);
+		memset(dbgImg.baseData, 0, 640 * 480);
 
+		BNS_VEC_FOREACH(camCalib->solverImages.data[i].checkerboardPoints) {
 			BNLM::Vector3f camSpace = rotation * BNLM::Vector3f(ptr->planePt.x(), ptr->planePt.y(), 0.0f) + t;
 			BNLM::Vector2f reproPt = (intrinsics * camSpace).hnorm();
 			BNLM::Vector2f diff = (reproPt - ptr->imagePt);
-			printf("diff: (%f %f)  mag: %f\n", diff.x(), diff.y(), diff.Mag());
+			printf("diff: %f\n", diff.SquareMag());
 		}
-
-		int xc = 0;
-		(void)xc;
 	}
 }
 
